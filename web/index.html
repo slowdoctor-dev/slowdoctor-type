@@ -36,6 +36,7 @@
         <div class="controls">
           <button id="next-btn" type="button">next passage <kbd>tab</kbd></button>
           <button id="restart-btn" type="button">restart <kbd>esc</kbd></button>
+          <button id="stats-btn" type="button">stats</button>
         </div>
         <div id="histstrip"></div>
       </main>
@@ -55,6 +56,23 @@
             <button id="r-next" type="button">next passage <kbd>enter</kbd></button>
             <button id="r-repeat" type="button">repeat <kbd>esc</kbd></button>
           </div>
+        </div>
+      </div>
+
+      <div id="dashboard" hidden>
+        <div class="results-card">
+          <div class="dash-head">
+            <span class="dash-title">history</span>
+            <button id="d-close" type="button">close <kbd>esc</kbd></button>
+          </div>
+          <div id="d-summary" class="results-attr"></div>
+          <canvas id="d-chart" width="560" height="140"></canvas>
+          <table id="d-recent">
+            <thead>
+              <tr><th>when</th><th>track</th><th>wpm</th><th>acc</th><th>cons</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
         </div>
       </div>
 

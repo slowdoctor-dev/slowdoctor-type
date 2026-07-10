@@ -2,7 +2,7 @@ import "./style.css";
 import { getPassage, postResult, type Passage } from "./api";
 import { FALLBACK_PASSAGE } from "./fallback";
 import { TypingEngine, type TestResult } from "./engine";
-import { loadHistory, saveResult, summary } from "./history";
+import { loadHistory, saveResult, summary, type HistoryEntry } from "./history";
 
 const TRACKS = ["news", "medical", "classic"] as const;
 const TRACK_KEY = "sdtype.track";
@@ -21,6 +21,7 @@ const attributionEl = $("#attribution");
 const articleLinkEl = $<HTMLAnchorElement>("#article-link");
 const resultsEl = $("#results");
 const histstripEl = $("#histstrip");
+const dashboardEl = $("#dashboard");
 
 let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
@@ -163,6 +164,111 @@ function restart(): void {
   if (currentPassage) startTest(currentPassage);
 }
 
+/** Dim source pills that have no passages yet (worker health endpoint). */
+async function loadTrackCounts(): Promise<void> {
+  try {
+    const res = await fetch("/api/health");
+    if (!res.ok) return;
+    const j = (await res.json()) as { tracks?: Record<string, number> };
+    const tracks = j.tracks ?? {};
+    document.querySelectorAll<HTMLButtonElement>("#tracks button").forEach((btn) => {
+      const n = tracks[btn.dataset.track ?? ""] ?? 0;
+      btn.classList.toggle("empty", n === 0);
+      btn.title = n === 0 ? "no passages yet" : `${n} passages`;
+    });
+  } catch {
+    /* dev without worker — leave pills as-is */
+  }
+}
+
+// --- history dashboard ---
+
+function openDashboard(): void {
+  renderDashboard();
+  dashboardEl.hidden = false;
+}
+
+function renderDashboard(): void {
+  const all = loadHistory();
+  $("#d-summary").textContent = all.length ? summary() : "no tests yet — type something first";
+
+  const tbody = $("#d-recent tbody");
+  tbody.textContent = "";
+  for (const e of all.slice(-10).reverse()) {
+    const tr = document.createElement("tr");
+    const when = document.createElement("td");
+    when.className = "dim";
+    when.textContent = e.at.slice(5, 16).replace("T", " ");
+    const track = document.createElement("td");
+    track.className = "dim";
+    track.textContent = e.track;
+    const wpm = document.createElement("td");
+    wpm.textContent = String(Math.round(e.wpm));
+    const acc = document.createElement("td");
+    acc.textContent = `${e.accuracy.toFixed(1)}%`;
+    const con = document.createElement("td");
+    con.className = "dim";
+    con.textContent = `${e.consistency.toFixed(0)}%`;
+    tr.append(when, track, wpm, acc, con);
+    tbody.append(tr);
+  }
+  drawHistoryChart(all);
+}
+
+/** Daily average net WPM (accent) and accuracy (dim, 0–100 scale), last 14 days with data. */
+function drawHistoryChart(entries: HistoryEntry[]): void {
+  const canvas = $<HTMLCanvasElement>("#d-chart");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+  const { width: w, height: h } = canvas;
+  ctx.clearRect(0, 0, w, h);
+
+  const byDay = new Map<string, HistoryEntry[]>();
+  for (const e of entries) {
+    const day = e.at.slice(0, 10);
+    byDay.set(day, [...(byDay.get(day) ?? []), e]);
+  }
+  const days = [...byDay.keys()].sort().slice(-14);
+  if (days.length === 0) return;
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;
+  const points = days.map((d) => {
+    const es = byDay.get(d) ?? [];
+    return { wpm: avg(es.map((e) => e.wpm)), acc: avg(es.map((e) => e.accuracy)) };
+  });
+
+  const pad = 10;
+  const maxWpm = Math.max(...points.map((p) => p.wpm), 60) * 1.15;
+  const x = (i: number) => pad + (days.length === 1 ? 0 : (i / (days.length - 1)) * (w - 2 * pad));
+  const yWpm = (v: number) => h - pad - (v / maxWpm) * (h - 2 * pad);
+  const yAcc = (v: number) => h - pad - (v / 100) * (h - 2 * pad);
+
+  const drawLine = (get: (p: { wpm: number; acc: number }) => number, yf: (v: number) => number, style: string, dash: number[]) => {
+    ctx.strokeStyle = style;
+    ctx.lineWidth = 2;
+    ctx.setLineDash(dash);
+    ctx.beginPath();
+    points.forEach((p, i) => {
+      if (i === 0) ctx.moveTo(x(i), yf(get(p)));
+      else ctx.lineTo(x(i), yf(get(p)));
+    });
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (points.length === 1) {
+      ctx.fillStyle = style;
+      ctx.beginPath();
+      ctx.arc(x(0), yf(get(points[0])), 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  };
+  drawLine((p) => p.acc, yAcc, "#5c6370", [4, 4]);
+  drawLine((p) => p.wpm, yWpm, "#7fb4a2", []);
+
+  const last = points[points.length - 1];
+  ctx.fillStyle = "#7fb4a2";
+  ctx.font = "12px ui-monospace, monospace";
+  ctx.fillText(`${Math.round(last.wpm)} wpm`, Math.max(pad, w - 70), yWpm(last.wpm) - 6);
+}
+
 // --- wiring ---
 
 document.querySelectorAll<HTMLButtonElement>("#tracks button").forEach((btn) => {
@@ -185,9 +291,27 @@ $("#restart-btn").addEventListener("click", (e) => {
 });
 $("#r-next").addEventListener("click", () => void nextPassage());
 $("#r-repeat").addEventListener("click", restart);
+$("#stats-btn").addEventListener("click", (e) => {
+  openDashboard();
+  (e.currentTarget as HTMLButtonElement).blur();
+});
+$("#d-close").addEventListener("click", () => {
+  dashboardEl.hidden = true;
+});
+dashboardEl.addEventListener("click", (e) => {
+  if (e.target === dashboardEl) dashboardEl.hidden = true;
+});
 
 document.addEventListener("keydown", (e) => {
   if (e.isComposing) return;
+
+  if (!dashboardEl.hidden) {
+    if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      dashboardEl.hidden = true;
+    }
+    return;
+  }
 
   if (!resultsEl.hidden) {
     if (e.key === "Enter" || e.key === "Tab") {
@@ -217,5 +341,5 @@ document.addEventListener("keydown", (e) => {
 
 renderTrackButtons();
 renderHistStrip();
-loadHistory(); // warm parse; ignore result
+void loadTrackCounts();
 void nextPassage();

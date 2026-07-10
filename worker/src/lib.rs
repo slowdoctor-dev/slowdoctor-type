@@ -33,8 +33,28 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             let db = ctx.env.d1("DB")?;
             let articles = count(&db, "articles").await?;
             let passages = count(&db, "passages").await?;
+            #[derive(serde::Deserialize)]
+            struct TrackRow {
+                track: String,
+                n: i64,
+            }
+            let rows = db
+                .prepare(
+                    "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
+                     JOIN articles a ON a.id = p.article_id GROUP BY a.track",
+                )
+                .all()
+                .await?
+                .results::<TrackRow>()?;
+            let mut tracks = serde_json::Map::new();
+            for t in TRACKS {
+                tracks.insert(t.to_string(), serde_json::json!(0));
+            }
+            for r in rows {
+                tracks.insert(r.track, serde_json::json!(r.n));
+            }
             Response::from_json(&serde_json::json!({
-                "ok": true, "articles": articles, "passages": passages
+                "ok": true, "articles": articles, "passages": passages, "tracks": tracks
             }))
         })
         .get_async("/api/passages", |req, ctx| async move {

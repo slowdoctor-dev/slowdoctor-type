@@ -204,7 +204,8 @@ kbd {
   font-variant-numeric: tabular-nums;
 }
 
-#results {
+#results,
+#dashboard {
   position: fixed;
   inset: 0;
   background: rgba(10, 12, 14, 0.85);
@@ -214,8 +215,66 @@ kbd {
   padding: 1rem;
 }
 
-#results[hidden] {
+#results[hidden],
+#dashboard[hidden] {
   display: none;
+}
+
+#tracks button.empty {
+  opacity: 0.4;
+}
+
+.dash-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dash-title {
+  color: var(--accent);
+  font-size: 0.95rem;
+}
+
+#d-close {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+#d-close:hover {
+  color: var(--fg);
+}
+
+#d-chart {
+  width: 100%;
+  height: 140px;
+}
+
+#d-recent {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+#d-recent th {
+  text-align: left;
+  color: var(--dim);
+  font-weight: 400;
+  padding: 0.25rem 0.5rem;
+  border-bottom: 1px solid #2a2e36;
+}
+
+#d-recent td {
+  padding: 0.25rem 0.5rem;
+  color: var(--fg);
+}
+
+#d-recent td.dim {
+  color: var(--dim);
 }
 
 .results-card {

@@ -44,9 +44,9 @@ do not read or write the LEAD workspace from here.
 
 ## Roadmap
 
-- **P0 (this bootstrap)**: VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
-- **P1**: PMC OA CC BY feeder (`medical` track — E-utilities search on derm/plastic-surgery journals, `license=cc by` filter); source-toggle UI polish; history dashboard (per-day WPM/accuracy chart from localStorage).
-- **P2**: Gutenberg `classic` track; mistyped-word review (spaced repetition); scoring crate → wasm-bindgen module replacing the TS mirror; iframe embed page for slowdoctor.dev.
+- **P0 (2026-07-10)**: ✅ VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
+- **P1 (2026-07-10)**: ✅ PMC OA CC BY feeder (`medical` track; contract in `extract/src/pmc.rs` header — E-utilities esearch json → efetch JATS; strict `/licenses/by/` match, by-nc/by-nd rejected); ✅ Gutenberg `classic` seed (`migrations/0002_classic_seed.sql`, 39 verbatim passages: Thoreau/Emerson/Russell/Franklin — regenerate with a fresh anchor-extract script rather than hand-editing texts); ✅ history dashboard (daily WPM/accuracy chart + recent table, localStorage only); ✅ per-track counts in `/api/health` → empty pills dimmed.
+- **P2**: mistyped-word review (spaced repetition); scoring crate → wasm-bindgen module replacing the TS mirror; iframe embed page for slowdoctor.dev; maybe per-track daily goals.
 
 ## Deploy state
 

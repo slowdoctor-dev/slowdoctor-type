@@ -30,9 +30,9 @@ and every passage renders its attribution + link to the full article.
 
 | Track | Source | License |
 |---|---|---|
-| `news` (P0) | VOA Learning English (As It Is, Science & Tech, Health & Lifestyle, Arts & Culture) | Public domain (credit to learningenglish.voanews.com) |
-| `medical` (P1, toggleable) | PMC Open Access subset, CC BY-filtered derm/plastic-surgery abstracts | CC BY (attribution) |
-| `classic` (P2) | Project Gutenberg essays/letters | Public domain |
+| `news` | VOA Learning English (As It Is, Science & Tech, Health & Lifestyle, Arts & Culture) — daily feed | Public domain (credit to learningenglish.voanews.com) |
+| `medical` | PMC Open Access, strictly CC BY-filtered derm/plastic-surgery abstracts — daily feed | CC BY (attribution rendered per passage) |
+| `classic` | Project Gutenberg verbatim extracts (Thoreau, Emerson, Russell, Franklin) — static seed migration | Public domain |
 
 ## Develop
 

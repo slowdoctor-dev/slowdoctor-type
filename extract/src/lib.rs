@@ -7,6 +7,8 @@
 //! `extract_paragraphs` starts returning nothing, re-derive the container
 //! from a live article before touching this code.
 
+pub mod pmc;
+
 pub struct RssItem {
     pub title: String,
     pub link: String,
@@ -65,9 +67,16 @@ pub fn extract_paragraphs(html: &str) -> Vec<String> {
         .or_else(|| after.find("id=\"comments\""))
         .unwrap_or(after.len());
     let body = &after[..end];
+    p_blocks(body)
+        .into_iter()
+        .filter(|t| is_body_paragraph(t))
+        .collect()
+}
 
+/// All `<p>…</p>` blocks in `html`, tag-stripped, entity-decoded, normalized.
+fn p_blocks(html: &str) -> Vec<String> {
     let mut paragraphs = Vec::new();
-    let mut rest = body;
+    let mut rest = html;
     while let Some(p_start) = find_tag_open(rest, "p") {
         let Some(gt) = rest[p_start..].find('>') else {
             break;
@@ -77,10 +86,7 @@ pub fn extract_paragraphs(html: &str) -> Vec<String> {
             break;
         };
         let inner = &rest[content_start..content_start + p_end];
-        let text = normalize(&decode_entities(&strip_tags(inner)));
-        if is_body_paragraph(&text) {
-            paragraphs.push(text);
-        }
+        paragraphs.push(normalize(&decode_entities(&strip_tags(inner))));
         rest = &rest[content_start + p_end + "</p>".len()..];
     }
     paragraphs
@@ -103,7 +109,7 @@ pub fn chunk_passages(paragraphs: &[String]) -> Vec<String> {
     let mut cur = String::new();
     let mut cur_words = 0usize;
 
-    let mut flush = |cur: &mut String, cur_words: &mut usize, chunks: &mut Vec<String>| {
+    let flush = |cur: &mut String, cur_words: &mut usize, chunks: &mut Vec<String>| {
         if *cur_words >= FLOOR_WORDS {
             chunks.push(cur.trim().to_string());
         }
@@ -195,7 +201,7 @@ pub fn normalize(text: &str) -> String {
         let mapped: Option<char> = match c {
             '\u{2018}' | '\u{2019}' | '\u{02BC}' | '`' | '\u{00B4}' => Some('\''),
             '\u{201C}' | '\u{201D}' | '\u{201E}' => Some('"'),
-            '\u{2013}' | '\u{2014}' | '\u{2212}' => Some('-'),
+            '\u{2010}' | '\u{2011}' | '\u{2013}' | '\u{2014}' | '\u{2212}' => Some('-'),
             '\u{00A0}' | '\u{2009}' | '\u{200A}' | '\u{202F}' => Some(' '),
             '\u{2026}' => {
                 out.push_str("...");
