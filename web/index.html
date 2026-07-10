@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Type well-written English — a typing trainer fed by openly licensed news and prose."
+    />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⌨️</text></svg>"
+    />
+    <title>slowdoctor type</title>
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="brand">slowdoctor<span class="brand-accent">·type</span></div>
+        <nav id="tracks" aria-label="text source">
+          <button data-track="news" type="button">news</button>
+          <button data-track="medical" type="button">medical</button>
+          <button data-track="classic" type="button">classic</button>
+        </nav>
+        <div class="live"><span id="live-wpm">—</span> wpm · <span id="live-acc">—</span>%</div>
+      </header>
+
+      <main>
+        <div id="stage">
+          <div id="words" aria-label="text to type"></div>
+        </div>
+        <div id="meta">
+          <span id="attribution"></span>
+          <a id="article-link" href="#" target="_blank" rel="noopener" hidden>read the full story ↗</a>
+        </div>
+        <div class="controls">
+          <button id="next-btn" type="button">next passage <kbd>tab</kbd></button>
+          <button id="restart-btn" type="button">restart <kbd>esc</kbd></button>
+        </div>
+        <div id="histstrip"></div>
+      </main>
+
+      <div id="results" hidden>
+        <div class="results-card">
+          <div class="results-main">
+            <div class="stat big"><span id="r-wpm">0</span><label>wpm</label></div>
+            <div class="stat"><span id="r-acc">0%</span><label>accuracy</label></div>
+            <div class="stat"><span id="r-raw">0</span><label>raw</label></div>
+            <div class="stat"><span id="r-con">0%</span><label>consistency</label></div>
+            <div class="stat"><span id="r-time">0s</span><label>time</label></div>
+          </div>
+          <canvas id="r-chart" width="560" height="120"></canvas>
+          <div id="r-attribution" class="results-attr"></div>
+          <div class="results-actions">
+            <button id="r-next" type="button">next passage <kbd>enter</kbd></button>
+            <button id="r-repeat" type="button">repeat <kbd>esc</kbd></button>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        texts: <a href="https://learningenglish.voanews.com" target="_blank" rel="noopener">VOA Learning English</a>
+        (public domain) &amp; CC&nbsp;BY sources, attributed per passage ·
+        <a href="https://github.com/slowdoctor-dev/slowdoctor-type" target="_blank" rel="noopener">source</a> ·
+        <a href="https://slowdoctor.dev" target="_blank" rel="noopener">slowdoctor.dev</a>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

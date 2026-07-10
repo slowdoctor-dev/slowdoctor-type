@@ -1,0 +1,303 @@
+:root {
+  --bg: #14161a;
+  --surface: #1b1e24;
+  --fg: #d6dae0;
+  --dim: #5c6370;
+  --accent: #7fb4a2;
+  --error: #e06c75;
+  --line-height: 2.4rem;
+  font-size: 16px;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  min-height: 100vh;
+}
+
+#app {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.5rem 1rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  gap: 1.25rem;
+}
+
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.brand {
+  font-size: 1.15rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.brand-accent {
+  color: var(--accent);
+}
+
+#tracks {
+  display: flex;
+  gap: 0.25rem;
+}
+
+#tracks button {
+  background: none;
+  border: none;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+#tracks button:hover {
+  color: var(--fg);
+}
+
+#tracks button.active {
+  color: var(--bg);
+  background: var(--accent);
+}
+
+.live {
+  margin-left: auto;
+  color: var(--dim);
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.live.on {
+  color: var(--accent);
+}
+
+main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+}
+
+#stage {
+  position: relative;
+}
+
+#words {
+  position: relative;
+  font-size: 1.35rem;
+  line-height: var(--line-height);
+  height: calc(3 * var(--line-height));
+  overflow: hidden;
+  color: var(--dim);
+  user-select: none;
+  cursor: default;
+  word-break: break-word;
+}
+
+#words.loading {
+  color: var(--dim);
+  font-size: 1rem;
+}
+
+#words span.c {
+  transition: color 60ms linear;
+}
+
+#words span.c.correct {
+  color: var(--fg);
+}
+
+#words span.c.wrong {
+  color: var(--error);
+  text-decoration: underline;
+  text-underline-offset: 0.3em;
+}
+
+#caret {
+  position: absolute;
+  width: 2px;
+  height: 1.6rem;
+  margin-top: 0.4rem;
+  background: var(--accent);
+  transition: left 70ms ease-out, top 70ms ease-out;
+  animation: blink 1.1s steps(1) infinite;
+}
+
+#caret.moving {
+  animation: none;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+#meta {
+  color: var(--dim);
+  font-size: 0.8rem;
+  min-height: 1.2rem;
+}
+
+#meta a {
+  color: var(--accent);
+  text-decoration: none;
+  margin-left: 0.5rem;
+}
+
+#meta a:hover {
+  text-decoration: underline;
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+button {
+  font: inherit;
+}
+
+.controls button,
+.results-actions button {
+  background: var(--surface);
+  color: var(--fg);
+  border: 1px solid #2a2e36;
+  border-radius: 6px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.controls button:hover,
+.results-actions button:hover {
+  border-color: var(--accent);
+}
+
+kbd {
+  color: var(--dim);
+  font-size: 0.75em;
+  border: 1px solid #2a2e36;
+  border-radius: 3px;
+  padding: 0 0.3em;
+  margin-left: 0.4em;
+}
+
+#histstrip {
+  color: var(--dim);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+#results {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 14, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+
+#results[hidden] {
+  display: none;
+}
+
+.results-card {
+  background: var(--surface);
+  border: 1px solid #2a2e36;
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 40rem;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.results-main {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.stat span {
+  font-size: 1.6rem;
+  color: var(--fg);
+}
+
+.stat.big span {
+  font-size: 3.2rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.stat label {
+  color: var(--dim);
+  font-size: 0.75rem;
+}
+
+#r-chart {
+  width: 100%;
+  height: 120px;
+}
+
+.results-attr {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
+.results-attr a {
+  color: var(--accent);
+}
+
+.results-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+footer {
+  color: var(--dim);
+  font-size: 0.72rem;
+  padding-top: 1rem;
+}
+
+footer a {
+  color: var(--dim);
+}
+
+footer a:hover {
+  color: var(--accent);
+}
+
+@media (max-width: 640px) {
+  #words {
+    font-size: 1.1rem;
+  }
+
+  .live {
+    margin-left: 0;
+  }
+}

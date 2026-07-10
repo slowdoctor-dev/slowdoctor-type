@@ -1,0 +1,9 @@
+target/
+build/
+.cargo/
+node_modules/
+web/dist/
+.wrangler/
+.dev.vars
+*.local
+.DS_Store

@@ -1,0 +1,53 @@
+# slowdoctor-type — Agent Guide
+
+Canonical context for any LLM coding agent working in this repo. `CLAUDE.md` points here.
+
+## What this is
+
+A public, single-purpose typing trainer for the owner (a doctor studying English):
+type openly licensed, well-written English passages (news / medical / classic prose).
+Bootstrapped 2026-07-10 from the LEAD workspace design brief
+(`lead/1-workspace/_inbox/2026-07-10_typing-trainer-brief.md`); this repo is standalone —
+do not read or write the LEAD workspace from here.
+
+## Locked decisions (Director-confirmed 2026-07-10)
+
+1. Separate repo under github `slowdoctor-dev`, deployed at **type.slowdoctor.dev**, linked from slowdoctor.dev (Next.js site — stacks never touch).
+2. **Public** deployment → feed may only contain **public-domain or CC BY** text, attribution rendered under every passage. No copyrighted sources, ever. Personal history stays in localStorage (no accounts). A cross-device history would be an Access-gated path later, not auth code.
+3. **Rust hybrid**: workers-rs backend (API + cron feeder + D1), TypeScript browser UI. UI stays TS — do not port the DOM layer to WASM frameworks.
+4. **PMC medical-English track = switchable option**: `track` tag exists in the schema from day one (`news` / `medical` / `classic`); the UI source toggle persists in localStorage.
+
+## Architecture
+
+- `worker/` — workers-rs crate. `#[event(fetch)]` router: `GET /api/passages`, `POST /api/results`, `GET /api/health`, `POST /api/feed` (Bearer `FEED_TOKEN` guard). `#[event(scheduled)]` daily feeder (cron `0 21 * * *` UTC = 06:00 KST).
+- `extract/` — VOA-specific parsing as its own dependency-free crate (no scraper/feed-rs; keeps wasm small, and host-runnable tests don't pull the wasm-only `worker` dep). Unit-tested against fixture snippets.
+- `scoring/` — canonical scoring formulas + tests. **Parity rule**: `web/src/scoring.ts` mirrors these formulas exactly; change both together or not at all. (Planned P2: compile this crate to wasm-bindgen and delete the TS mirror.)
+- `web/` — Vite + vanilla TS, zero runtime dependencies. Built `web/dist` is served via Workers static assets; unmatched routes (`/api/*`) fall through to the Worker.
+- `migrations/` — D1 SQL, applied with `wrangler d1 migrations apply DB [--local|--remote]`.
+
+## VOA extraction contract (verified live 2026-07-10)
+
+- Feed zones (RSS): As It Is `zkm-ql-vomx-tpej-rqi`, Science & Technology `zmg_pl-vomx-tpeymtm`, Health & Lifestyle `zmmpql-vomx-tpey-_q`, Arts & Culture `zpyp_l-vomx-tpe_rym` — full URL `https://learningenglish.voanews.com/api/<zone>`.
+- Item links: **slug URLs** (`/a/<slug>/<id>.html`) are text articles; **bare numeric** (`/a/<id>.html`) are audio-only → skip.
+- Body lives in `<div class="wsw">…`; take `<p>` contents until the `Words in This Story` glossary heading; drop boilerplate (`No media source currently available`, `_____` separator lines, paragraphs < 4 words).
+- Normalize at ingest so passages are typeable: curly quotes → straight, en/em dash → `-`, ellipsis → `...`, NBSP → space, collapse whitespace.
+- RSS `<description>` is summary-only — full text always requires the article fetch.
+- If extraction starts returning 0 paragraphs, VOA changed their DOM: re-derive the container from a live article before touching code.
+
+## Conventions
+
+- Commit messages: `{YYYY-MM-DD} {English summary}` (no Conventional Commits, no Co-Authored-By).
+- Keep the frontend dependency-free at runtime; dev-deps are Vite + TypeScript only.
+- `cargo test -p scoring` and `cd web && npm run build` must pass before any push.
+- Builds on WSL DrvFs are slow: set `CARGO_TARGET_DIR=~/.cache/slowdoctor-type-target` (an untracked `.cargo/config.toml` does this on the original WSL machine; recreate as needed — machine-specific, deliberately not committed).
+- `cargo install worker-build` needs OpenSSL headers; on the original WSL box (no sudo, no libssl-dev) they live in a user-space extract: `export OPENSSL_INCLUDE_DIR=~/.local/openssl-dev/usr/include OPENSSL_LIB_DIR=~/.local/openssl-dev/usr/lib/x86_64-linux-gnu OPENSSL_STATIC=1` (created 2026-07-10 via `apt-get download libssl-dev` + `dpkg -x`). Normal machines: just install `pkg-config libssl-dev`.
+
+## Roadmap
+
+- **P0 (this bootstrap)**: VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
+- **P1**: PMC OA CC BY feeder (`medical` track — E-utilities search on derm/plastic-surgery journals, `license=cc by` filter); source-toggle UI polish; history dashboard (per-day WPM/accuracy chart from localStorage).
+- **P2**: Gutenberg `classic` track; mistyped-word review (spaced repetition); scoring crate → wasm-bindgen module replacing the TS mirror; iframe embed page for slowdoctor.dev.
+
+## Deploy state
+
+- Created 2026-07-10; **not yet deployed** — `database_id` in `wrangler.jsonc` is a placeholder until `wrangler d1 create slowdoctor-type` runs. Follow README "Deploy (first time)".

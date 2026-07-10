@@ -1,0 +1,137 @@
+mod feeder;
+
+use worker::*;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Passage {
+    id: i64,
+    text: String,
+    word_count: i64,
+    title: String,
+    url: String,
+    attribution: String,
+    track: String,
+}
+
+#[derive(serde::Deserialize)]
+struct ResultIn {
+    passage_id: Option<i64>,
+    wpm: f64,
+    raw_wpm: f64,
+    accuracy: f64,
+    consistency: f64,
+    duration_ms: i64,
+}
+
+const TRACKS: &[&str] = &["news", "medical", "classic"];
+
+#[event(fetch)]
+async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
+    console_error_panic_hook::set_once();
+    Router::new()
+        .get_async("/api/health", |_req, ctx| async move {
+            let db = ctx.env.d1("DB")?;
+            let articles = count(&db, "articles").await?;
+            let passages = count(&db, "passages").await?;
+            Response::from_json(&serde_json::json!({
+                "ok": true, "articles": articles, "passages": passages
+            }))
+        })
+        .get_async("/api/passages", |req, ctx| async move {
+            let url = req.url()?;
+            let track = url
+                .query_pairs()
+                .find(|(k, _)| k == "track")
+                .map(|(_, v)| v.to_string())
+                .unwrap_or_else(|| "news".to_string());
+            if !TRACKS.contains(&track.as_str()) {
+                return Response::error("unknown track", 400);
+            }
+            let db = ctx.env.d1("DB")?;
+            let row = db
+                .prepare(
+                    "SELECT p.id, p.text, p.word_count, a.title, a.url, a.attribution, a.track \
+                     FROM passages p JOIN articles a ON a.id = p.article_id \
+                     WHERE a.track = ?1 ORDER BY RANDOM() LIMIT 1",
+                )
+                .bind(&[track.as_str().into()])?
+                .first::<Passage>(None)
+                .await?;
+            match row {
+                Some(p) => Response::from_json(&serde_json::json!({ "passage": p })),
+                None => Response::from_json(&serde_json::json!({
+                    "passage": null,
+                    "hint": "track is empty — run the feeder (POST /api/feed) or wait for the daily cron"
+                })),
+            }
+        })
+        .post_async("/api/results", |mut req, ctx| async move {
+            let Ok(r) = req.json::<ResultIn>().await else {
+                return Response::error("bad json", 400);
+            };
+            let sane = (0.0..=400.0).contains(&r.wpm)
+                && (0.0..=500.0).contains(&r.raw_wpm)
+                && (0.0..=100.0).contains(&r.accuracy)
+                && (0.0..=100.0).contains(&r.consistency)
+                && (3_000..=1_800_000).contains(&r.duration_ms);
+            if !sane {
+                return Response::error("result out of range", 400);
+            }
+            let db = ctx.env.d1("DB")?;
+            db.prepare(
+                "INSERT INTO results (passage_id, wpm, raw_wpm, accuracy, consistency, duration_ms) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .bind(&[
+                match r.passage_id {
+                    Some(id) => (id as f64).into(),
+                    None => wasm_bindgen::JsValue::NULL,
+                },
+                r.wpm.into(),
+                r.raw_wpm.into(),
+                r.accuracy.into(),
+                r.consistency.into(),
+                (r.duration_ms as f64).into(),
+            ])?
+            .run()
+            .await?;
+            Response::from_json(&serde_json::json!({ "ok": true }))
+        })
+        .post_async("/api/feed", |req, ctx| async move {
+            let expected = format!("Bearer {}", ctx.env.secret("FEED_TOKEN")?);
+            let got = req.headers().get("authorization")?.unwrap_or_default();
+            if got != expected {
+                return Response::error("unauthorized", 401);
+            }
+            let report = feeder::run(&ctx.env).await?;
+            Response::from_json(&report)
+        })
+        .run(req, env)
+        .await
+}
+
+#[event(scheduled)]
+async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
+    console_error_panic_hook::set_once();
+    match feeder::run(&env).await {
+        Ok(r) => console_log!(
+            "feeder: {} feeds ok, {} new articles, {} new passages, errors: {:?}",
+            r.feeds_ok,
+            r.articles_new,
+            r.passages_new,
+            r.errors
+        ),
+        Err(e) => console_error!("feeder failed: {e}"),
+    }
+}
+
+async fn count(db: &D1Database, table: &str) -> Result<i64> {
+    // `table` comes from internal call sites only — never user input
+    let row = db
+        .prepare(&format!("SELECT COUNT(*) AS n FROM {table}"))
+        .first::<serde_json::Value>(None)
+        .await?;
+    Ok(row
+        .and_then(|v| v.get("n").and_then(|n| n.as_i64()))
+        .unwrap_or(0))
+}

@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["worker", "scoring", "extract"]
+
+# NOTE: no `strip = true` here — stripping removes the wasm custom sections
+# (target_features) that wasm-bindgen needs; worker-build runs wasm-opt anyway.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "slowdoctor-type",
+  "main": "worker/build/worker/shim.mjs",
+  "compatibility_date": "2026-07-01",
+  "build": {
+    "command": "cargo install -q worker-build && cd worker && worker-build --release"
+  },
+  "assets": {
+    "directory": "web/dist"
+  },
+  "triggers": {
+    // 21:00 UTC = 06:00 KST — daily VOA feed refresh
+    "crons": ["0 21 * * *"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "slowdoctor-type",
+      // placeholder — replace with the id from `npx wrangler d1 create slowdoctor-type`
+      "database_id": "REPLACE_AFTER_D1_CREATE"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
