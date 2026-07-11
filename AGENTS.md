@@ -41,8 +41,19 @@ do not read or write the LEAD workspace from here.
 - Keep the frontend dependency-free at runtime; dev-deps are Vite + TypeScript only.
 - `cargo test -p scoring -p extract`, `cd web && npm test` (scoring-parity + words-logic selftest), and `npm run build` must pass before any push.
 - **Run-verification screenshots** (Director standing request, 2026-07-11): after substantive changes, run the app (`wrangler dev`) and capture screenshots of the main screens — typing view, results, dashboard — and show them to the Director as proof it runs.
-- Builds on WSL DrvFs are slow: set `CARGO_TARGET_DIR=~/.cache/slowdoctor-type-target` (an untracked `.cargo/config.toml` does this on the original WSL machine; recreate as needed — machine-specific, deliberately not committed).
+- Mostly historical: only if working from a DrvFs checkout (`/mnt/c/...`), set `CARGO_TARGET_DIR` onto ext4 via an untracked `.cargo/config.toml` — irrelevant at the canonical `~/repo` location.
 - `cargo install worker-build` needs OpenSSL headers; on the original WSL box (no sudo, no libssl-dev) they live in a user-space extract: `export OPENSSL_INCLUDE_DIR=~/.local/openssl-dev/usr/include OPENSSL_LIB_DIR=~/.local/openssl-dev/usr/lib/x86_64-linux-gnu OPENSSL_STATIC=1` (created 2026-07-10 via `apt-get download libssl-dev` + `dpkg -x`). Normal machines: just install `pkg-config libssl-dev`.
+
+## Multi-agent workflow (Claude Code + Codex side by side in tmux)
+
+The Director runs both CLIs in this folder. This file is the shared context: Codex reads `AGENTS.md` natively (agents.md standard), Claude Code arrives via the `CLAUDE.md` pointer. Keep it the single source of truth — never fork per-runtime instructions.
+
+- **Commit is the handoff unit.** Finish → run the quality gates → commit with the `{YYYY-MM-DD} {summary}` format. Never leave work-in-progress uncommitted when yielding to the other agent; start every stint with `git status && git log --oneline -3`.
+- **Split by area when parallel**: one agent in `worker/`+`extract/`+`migrations/` (Rust/data), the other in `web/` (UI). The seam is the API contract in `worker/src/lib.rs` — change it only with both sides in one commit.
+- **Dev servers**: `npx wrangler dev` defaults to port 8787 — a second instance needs `--port 8788`. Both share the same local D1 in `.wrangler/`; don't run two feeders concurrently.
+- **Codex note** (machine experience): weaker cwd grounding — give it absolute paths in prompts; model quota pools differ per model.
+- **Quality gates before any commit** (both agents, no exceptions): `cargo test -p scoring -p extract` · `cd web && npm test` · `npm run build`. Scoring formula changes require touching the Rust crate and the TS mirror in the same commit (parity rule).
+- **Director standing request**: after substantive changes, run the app and deliver screenshots of the main screens (typing / results / dashboard) — in VS Code contexts, also drop copies with clickable file links.
 
 ## Roadmap
 
@@ -53,6 +64,7 @@ do not read or write the LEAD workspace from here.
 
 ## Deploy state
 
+- Canonical location: **`~/repo/slowdoctor-type`** (WSL ext4 — moved 2026-07-11 from `/mnt/c/.../repos/slowdoctor-dev/slowdoctor-type`; move verified: all commits, seeded `.wrangler/` D1, 18 Rust tests + 22 TS selftest checks green on ext4). The old DrvFs copy is a backup only — delete it once the GitHub push exists. None of the DrvFs workarounds apply here.
 - Created 2026-07-10; development split into this independent environment 2026-07-11 (Director decision). The LEAD workspace no longer tracks this project beyond its design brief.
 - **Not yet on GitHub** — repo creation was blocked for the agent (human must pick visibility). First action for the Director or a new session:
   `/home/leadprs/bin/gh auth switch -u slowdoctor-dev && /home/leadprs/bin/gh repo create slowdoctor-dev/slowdoctor-type --private --source . --push && /home/leadprs/bin/gh auth switch -u leadprs-clinic` (swap `--private` for `--public` if preferred; the site footer's "source" link assumes public eventually).
