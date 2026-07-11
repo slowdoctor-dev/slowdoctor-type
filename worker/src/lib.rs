@@ -90,15 +90,30 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 return Response::error("unknown track", 400);
             }
             let db = ctx.env.d1("DB")?;
-            let row = db
+            // two-step pick: shuffle over narrow ids only, then fetch one row
+            // by PK — ORDER BY RANDOM() over full rows drags every passage's
+            // text through the sorter and grows linearly with the feed.
+            let picked = db
                 .prepare(
-                    "SELECT p.id, p.text, p.word_count, a.title, a.url, a.attribution, a.track \
-                     FROM passages p JOIN articles a ON a.id = p.article_id \
+                    "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
                      WHERE a.track = ?1 ORDER BY RANDOM() LIMIT 1",
                 )
                 .bind(&[track.as_str().into()])?
-                .first::<Passage>(None)
-                .await?;
+                .first::<serde_json::Value>(None)
+                .await?
+                .and_then(|v| v.get("id").and_then(|n| n.as_i64()));
+            let row = match picked {
+                Some(pid) => {
+                    db.prepare(
+                        "SELECT p.id, p.text, p.word_count, a.title, a.url, a.attribution, a.track \
+                         FROM passages p JOIN articles a ON a.id = p.article_id WHERE p.id = ?1",
+                    )
+                    .bind(&[(pid as f64).into()])?
+                    .first::<Passage>(None)
+                    .await?
+                }
+                None => None,
+            };
             let resp = match row {
                 Some(p) => Response::from_json(&serde_json::json!({ "passage": p })),
                 None => Response::from_json(&serde_json::json!({

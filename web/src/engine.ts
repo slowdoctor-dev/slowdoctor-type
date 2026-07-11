@@ -40,9 +40,11 @@ export class TypingEngine {
   private totalKeystrokes = 0;
   private keystrokeTimes: number[] = [];
   private wrongEver = new Set<number>();
+  private correctCount = 0; // final-state "correct" chars, maintained incrementally
   private readonly spans: HTMLSpanElement[] = [];
   private readonly caret: HTMLDivElement;
   private caretMoveTimer: number | undefined;
+  private caretRaf: number | undefined;
   private progressTimer: number | undefined;
 
   constructor(
@@ -124,16 +126,32 @@ export class TypingEngine {
   destroy(): void {
     window.clearInterval(this.progressTimer);
     window.clearTimeout(this.caretMoveTimer);
+    if (this.caretRaf !== undefined) cancelAnimationFrame(this.caretRaf);
   }
 
   private setState(index: number, state: CharState): void {
+    if (this.states[index] === "correct") this.correctCount--;
+    if (state === "correct") this.correctCount++;
     this.states[index] = state;
     const span = this.spans[index];
     span.classList.toggle("correct", state === "correct");
     span.classList.toggle("wrong", state === "wrong");
   }
 
+  /**
+   * Caret moves coalesce to one layout pass per frame: the offset reads below
+   * force a synchronous reflow after the class writes above, and doing that
+   * per keystroke thrashes layout for fast typists (10+ keys/sec).
+   */
   private positionCaret(): void {
+    if (this.caretRaf !== undefined) return;
+    this.caretRaf = requestAnimationFrame(() => {
+      this.caretRaf = undefined;
+      this.placeCaret();
+    });
+  }
+
+  private placeCaret(): void {
     const target =
       this.pos < this.spans.length ? this.spans[this.pos] : this.spans[this.spans.length - 1];
     const atEnd = this.pos >= this.spans.length;
@@ -158,9 +176,8 @@ export class TypingEngine {
       if (this.startedAt === null || this.finished) return;
       const elapsed = performance.now() - this.startedAt;
       if (elapsed < 1000) return;
-      const correctChars = this.states.filter((s) => s === "correct").length;
       this.callbacks.onProgress(
-        scoring.wpm(correctChars, elapsed),
+        scoring.wpm(this.correctCount, elapsed),
         scoring.accuracy(this.correctKeystrokes, this.totalKeystrokes),
       );
     }, 500);
@@ -170,17 +187,18 @@ export class TypingEngine {
     this.finished = true;
     window.clearInterval(this.progressTimer);
     const durationMs = Math.max(1, Math.round(now - (this.startedAt ?? now)));
-    const correctChars = this.states.filter((s) => s === "correct").length;
+    const correctChars = this.correctCount;
+    const perSecondRaw = this.perSecondRaw(durationMs);
 
     const result: TestResult = {
       wpm: scoring.wpm(correctChars, durationMs),
       rawWpm: scoring.rawWpm(this.totalKeystrokes, durationMs),
       accuracy: scoring.accuracy(this.correctKeystrokes, this.totalKeystrokes),
-      consistency: scoring.consistency(this.perSecondRaw(durationMs)),
+      consistency: scoring.consistency(perSecondRaw),
       durationMs,
       correctChars,
       typedChars: this.totalKeystrokes,
-      perSecondRaw: this.perSecondRaw(durationMs),
+      perSecondRaw,
       wrongIndices: [...this.wrongEver],
     };
     this.callbacks.onFinish(result);

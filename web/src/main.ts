@@ -268,11 +268,11 @@ function practiceWeakWords(): void {
   );
 }
 
-function renderGoals(): void {
+function renderGoals(entries: HistoryEntry[] = loadHistory()): void {
   const box = $("#d-goals");
   box.textContent = "";
   const goals = loadGoals();
-  const counts = countsForDay(loadHistory(), new Date().toISOString().slice(0, 10));
+  const counts = countsForDay(entries, new Date().toISOString().slice(0, 10));
   for (const t of GOAL_TRACKS) {
     const row = document.createElement("div");
     row.className = "goal-row";
@@ -301,7 +301,7 @@ function renderGoals(): void {
 function renderDashboard(): void {
   const all = loadHistory();
   $("#d-summary").textContent = all.length ? summary() : "no tests yet — type something first";
-  renderGoals();
+  renderGoals(all);
 
   const now = new Date().toISOString();
   const words = problemWords(12);
