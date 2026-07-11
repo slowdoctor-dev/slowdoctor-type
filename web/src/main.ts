@@ -11,6 +11,7 @@ import {
   reviewQueue,
 } from "./words";
 import { GOAL_TRACKS, countsForDay, clampGoal, goalProgress, loadGoals, saveGoal } from "./goals";
+import { initAccount, accountModalOpen } from "./account";
 
 const TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
 const TRACK_KEY = "sdtype.track";
@@ -436,6 +437,9 @@ dashboardEl.addEventListener("click", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.isComposing) return;
 
+  // account panel owns its keys (text inputs + its own esc handler)
+  if (accountModalOpen()) return;
+
   if (!dashboardEl.hidden) {
     if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") {
       e.preventDefault();
@@ -475,5 +479,6 @@ if (new URLSearchParams(location.search).has("embed")) {
 }
 renderTrackButtons();
 renderHistStrip();
+void initAccount();
 void loadTrackCounts();
 void nextPassage();

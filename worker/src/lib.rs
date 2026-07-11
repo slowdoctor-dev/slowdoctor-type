@@ -1,3 +1,4 @@
+mod auth;
 mod feeder;
 
 use worker::*;
@@ -99,9 +100,10 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 return Response::error("result out of range", 400);
             }
             let db = ctx.env.d1("DB")?;
+            let user_id = auth::session_user_id(&db, &req).await?; // for future ranking
             db.prepare(
-                "INSERT INTO results (passage_id, wpm, raw_wpm, accuracy, consistency, duration_ms) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO results (passage_id, wpm, raw_wpm, accuracy, consistency, duration_ms, user_id) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
             )
             .bind(&[
                 match r.passage_id {
@@ -113,11 +115,21 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 r.accuracy.into(),
                 r.consistency.into(),
                 (r.duration_ms as f64).into(),
+                match user_id {
+                    Some(id) => (id as f64).into(),
+                    None => wasm_bindgen::JsValue::NULL,
+                },
             ])?
             .run()
             .await?;
             Response::from_json(&serde_json::json!({ "ok": true }))
         })
+        .get_async("/auth/login/:provider", auth::login)
+        .get_async("/auth/callback/:provider", auth::callback)
+        .post_async("/auth/logout", auth::logout)
+        .post_async("/auth/unlink/:provider", auth::unlink)
+        .get_async("/api/me", auth::me)
+        .post_async("/api/me", auth::update_me)
         .post_async("/api/feed", |req, ctx| async move {
             let expected = format!("Bearer {}", ctx.env.secret("FEED_TOKEN")?);
             let got = req.headers().get("authorization")?.unwrap_or_default();

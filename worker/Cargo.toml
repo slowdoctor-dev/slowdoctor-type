@@ -12,3 +12,5 @@ worker = { version = "0.8", features = ["d1"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 console_error_panic_hook = "0.1"
+# session tokens / OAuth state (js feature = wasm-compatible entropy)
+getrandom = { version = "0.2", features = ["js"] }

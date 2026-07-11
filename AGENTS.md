@@ -13,7 +13,7 @@ do not read or write the LEAD workspace from here.
 ## Locked decisions (Director-confirmed 2026-07-10)
 
 1. Separate repo under github `slowdoctor-dev`, deployed at **type.slowdoctor.dev**, linked from slowdoctor.dev (Next.js site — stacks never touch).
-2. **Public** deployment → feed may only contain **public-domain or CC BY** text, attribution rendered under every passage. No copyrighted sources, ever. Personal history stays in localStorage (no accounts). A cross-device history would be an Access-gated path later, not auth code.
+2. **Public** deployment → feed may only contain **public-domain or CC BY** text, attribution rendered under every passage. No copyrighted sources, ever. Personal history stays in localStorage. **Amended 2026-07-11 (Director): accounts exist now** — social sign-in (Google/Kakao/GitHub OAuth in the worker, `worker/src/auth.rs`) for profiles and upcoming rankings. Privacy stance: **no email collection**, only provider uid + display-name snapshot; a privacy-policy page is required before adding providers that mandate review (e.g. Naver).
 3. **Rust hybrid**: workers-rs backend (API + cron feeder + D1), TypeScript browser UI. UI stays TS — do not port the DOM layer to WASM frameworks.
 4. **PMC paper-English track = switchable option**: `track` tag exists in the schema from day one; the UI source toggle persists in localStorage. **Track lineup amended 2026-07-11 (Director)**: now `news` / `daily` / `aesthetic` / `federal` — `classic` (Gutenberg) retired, `medical` renamed `aesthetic` (it is derm/plastic-surgery paper abstracts, not patient-facing health info), `federal` added (modern-English U.S. government works; migration `0005`).
 5. **Design: minimal, monkeytype-like** (Director 2026-07-11): quiet text buttons, chrome fades while typing (`body.typing`), muted dark palette with the sage accent kept for brand. `daily` track = authored everyday chat/reply English (original, CC0) — the register the Director actually writes in.
@@ -72,6 +72,8 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 - **P2c (open)**: scoring crate → wasm-bindgen module replacing the TS mirror — was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
 - **P3 (2026-07-11)**: ✅ track rework (Director): `classic` retired, `medical` → `aesthetic`, `federal` added — NASA + ShareAmerica WordPress full-content feeds, migration `0005`, localStorage track value migrated in `main.ts`. Federal contract pending live verification (see its section).
 - **P4 (open, Director 2026-07-11)**: passage difficulty — compute a readability score (Flesch-Kincaid grade) at ingest (`fk_grade` column on passages), then a practice-settings panel: **multi-select tracks + FK score range**, with the picker serving matching passages randomly but **evenly distributed** across the selected pool (not biased toward the biggest track).
+- **P5 (2026-07-11)**: ✅ social sign-in — Google/Kakao/GitHub OAuth code flow in `worker/src/auth.rs` (D1 `users`/`identities`/`sessions`, migration `0006`), account linking (one user ↔ N providers, conflict-safe), profile panel (nickname + composed avatar: emoji × background hue, randomized at signup), results rows tagged with `user_id` for future rankings. **Not usable until the provider apps are registered and 6 secrets set** — see the sign-in runbook below. Provider order rationale: Google/Kakao/GitHub need no review; Naver (review required) and Apple ($99/yr) deferred.
+- **P6 (open)**: per-user rankings + cross-device history sync on top of P5.
 
 ## Deploy state
 
@@ -82,3 +84,19 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 - **Workers Builds config** (dashboard → the `slowdoctor-type` Workers project → Settings → Build): the build image has NO Rust preinstalled, so the Build command installs rustup each run: `curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --target wasm32-unknown-unknown && . "$HOME/.cargo/env" && cd web && npm ci && npm run build`. Deploy command: `. "$HOME/.cargo/env" && npx wrangler d1 migrations apply DB --remote && npx wrangler deploy`. Full build ≈ 6 min (≈3.5 min of it is `cargo install worker-build`).
 - **Migrations auto-apply on every deploy** (wrangler auto-confirms in CI). Keep migrations additive; anything destructive needs a deliberate manual window, not a push.
 - **FEED_TOKEN secret intentionally not set** (Director 2026-07-11: wait for the cron instead of seeding manually). `POST /api/feed` errors until `wrangler secret put FEED_TOKEN` is run; the cron feeder does not need it. First cron fill: 2026-07-12 06:00 KST.
+
+## Sign-in runbook (P5 — one-time provider setup, Director steps)
+
+Each provider needs an app registration; callback URL is always
+`https://type.slowdoctor.dev/auth/callback/<provider>`. Put the 6 secrets in
+Cloudflare dashboard → the `slowdoctor-type` Worker → Settings → Variables
+and Secrets (type Secret). A provider with missing secrets returns 503 from
+`/auth/login/<provider>`; the others keep working, so setup can be piecemeal.
+
+1. **Google** — console.cloud.google.com → APIs & Services → Credentials → Create OAuth client ID (Web application); add the callback URL to Authorized redirect URIs; consent screen External + non-sensitive scopes only (we request `openid profile`, no email). → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+2. **Kakao** — developers.kakao.com → 내 애플리케이션 → 앱 만들기 → 카카오 로그인 활성화 + Redirect URI 등록; 동의항목: 닉네임(기본) only, no email (so no biz-app conversion needed); [보안]에서 Client Secret 발급·활성화. → `KAKAO_CLIENT_ID` (= REST API 키), `KAKAO_CLIENT_SECRET`.
+3. **GitHub** — github.com/settings/developers → New OAuth App → homepage `https://type.slowdoctor.dev`, callback URL as above. → `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`.
+
+E2E check after secrets land: sign in with each provider, link a second one
+from the account panel, rename + reroll the avatar, sign out/in again — the
+same profile should come back via either provider.
