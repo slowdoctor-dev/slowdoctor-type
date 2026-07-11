@@ -174,6 +174,11 @@ pub async fn callback(req: Request, ctx: RouteContext<()>) -> Result<Response> {
             insert_identity(&db, p.key, &uid, me, &display).await?;
             me
         }
+        // "link" clicked but the session died mid-flow — creating a fresh
+        // account here would silently split the user's profile in two
+        (None, true, None) => {
+            return finish(&req, "expired", None);
+        }
         (None, _, _) => {
             let nickname: String = display.chars().take(20).collect();
             db.prepare("INSERT INTO users (nickname, avatar) VALUES (?1, ?2)")

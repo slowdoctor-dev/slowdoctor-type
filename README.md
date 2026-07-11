@@ -49,15 +49,19 @@ npx wrangler dev                           # builds via worker-build, serves UI 
 cargo test -p scoring
 ```
 
-## Deploy (first time)
+## Deploy
+
+Deploys run on Cloudflare **Workers Builds** (Git integration) from `main` —
+build/deploy commands live in the Workers project settings, and D1 migrations
+are applied automatically by the deploy command. See AGENTS.md "Deploy state"
+for the current trigger status and the sign-in secrets runbook.
+
+Manual bootstrap from scratch (no Workers Builds):
 
 ```bash
 npx wrangler d1 create slowdoctor-type     # put database_id into wrangler.jsonc
 npx wrangler d1 migrations apply DB --remote
-npx wrangler secret put FEED_TOKEN         # any random string; guards manual feed endpoint
-cd web && npm run build && cd ..
+cd web && npm ci && npm run build && cd ..
 npx wrangler deploy
-# then: Cloudflare dashboard → Workers → custom domain type.slowdoctor.dev
-# seed immediately instead of waiting for cron:
-curl -X POST https://type.slowdoctor.dev/api/feed -H "authorization: Bearer $FEED_TOKEN"
+# optional: FEED_TOKEN secret enables manual feeding via POST /api/feed
 ```

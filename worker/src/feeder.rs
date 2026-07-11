@@ -111,32 +111,32 @@ async fn housekeeping(db: &D1Database, report: &FeedReport) -> Result<()> {
     Ok(())
 }
 
-/// Which of `ids` already exist in `articles` — one query instead of N.
+/// Which of `ids` already exist in `articles` — chunked IN queries instead
+/// of one lookup per item (D1 caps bound parameters per statement at 100).
 async fn existing_ids(
     db: &D1Database,
     ids: &[String],
 ) -> Result<std::collections::HashSet<String>> {
     let mut found = std::collections::HashSet::new();
-    if ids.is_empty() {
-        return Ok(found);
-    }
-    let placeholders = (1..=ids.len())
-        .map(|i| format!("?{i}"))
-        .collect::<Vec<_>>()
-        .join(",");
     #[derive(serde::Deserialize)]
     struct Row {
         id: String,
     }
-    let binds: Vec<wasm_bindgen::JsValue> = ids.iter().map(|s| s.as_str().into()).collect();
-    let rows = db
-        .prepare(&format!("SELECT id FROM articles WHERE id IN ({placeholders})"))
-        .bind(&binds)?
-        .all()
-        .await?
-        .results::<Row>()?;
-    for r in rows {
-        found.insert(r.id);
+    for chunk in ids.chunks(80) {
+        let placeholders = (1..=chunk.len())
+            .map(|i| format!("?{i}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let binds: Vec<wasm_bindgen::JsValue> = chunk.iter().map(|s| s.as_str().into()).collect();
+        let rows = db
+            .prepare(&format!("SELECT id FROM articles WHERE id IN ({placeholders})"))
+            .bind(&binds)?
+            .all()
+            .await?
+            .results::<Row>()?;
+        for r in rows {
+            found.insert(r.id);
+        }
     }
     Ok(found)
 }

@@ -13,6 +13,7 @@ rustup target list --installed | grep -q wasm32-unknown-unknown \
 cargo check -p slowdoctor-type-worker --target wasm32-unknown-unknown
 
 echo "== web selftest + build"
+(cd web && [ -d node_modules ] || npm ci)
 (cd web && npm test && npm run build)
 
 echo "all gates green"

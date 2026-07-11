@@ -56,7 +56,7 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             }
             // latest feeder run — articles_new stuck at 0 or errors piling up
             // means a source contract drifted (see AGENTS.md extraction notes)
-            let last_feed = db
+            let mut last_feed = db
                 .prepare(
                     "SELECT at, feeds_ok, items_seen, articles_new, passages_new, errors \
                      FROM feed_log ORDER BY id DESC LIMIT 1",
@@ -64,6 +64,16 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 .first::<serde_json::Value>(None)
                 .await
                 .unwrap_or(None);
+            // errors is stored as a JSON string — surface it as a real array
+            if let Some(obj) = last_feed.as_mut().and_then(|v| v.as_object_mut()) {
+                if let Some(parsed) = obj
+                    .get("errors")
+                    .and_then(|e| e.as_str())
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                {
+                    obj.insert("errors".into(), parsed);
+                }
+            }
             no_store(Response::from_json(&serde_json::json!({
                 "ok": true, "articles": articles, "passages": passages, "tracks": tracks,
                 "last_feed": last_feed
