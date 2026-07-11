@@ -30,6 +30,9 @@
         <div class="live"><span id="live-wpm">—</span><span class="live-unit"> wpm</span> <span id="live-acc">—</span><span class="live-unit">%</span></div>
         <div id="stage">
           <div id="words" aria-label="text to type"></div>
+          <!-- invisible input: summons the virtual keyboard on touch devices -->
+          <input id="kbd" type="text" autocomplete="off" autocapitalize="none"
+                 autocorrect="off" spellcheck="false" aria-hidden="true" tabindex="-1" />
         </div>
         <div id="meta">
           <span id="attribution"></span>

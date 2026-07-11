@@ -80,19 +80,15 @@ export class TypingEngine {
 
   /** Returns true if the key event was consumed by the test. */
   handleKey(e: KeyboardEvent): boolean {
-    if (this.finished) return false;
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
-
-    if (e.key === "Backspace") {
-      if (this.pos > 0) {
-        this.pos--;
-        this.setState(this.pos, "pending");
-        this.positionCaret();
-      }
-      return true;
-    }
+    if (e.key === "Backspace") return this.backspace();
     if (e.key.length !== 1) return false;
+    return this.inputChar(e.key);
+  }
 
+  /** One character of input, from any source (physical key or virtual keyboard). */
+  inputChar(char: string): boolean {
+    if (this.finished) return false;
     const now = performance.now();
     if (this.startedAt === null) {
       this.startedAt = now;
@@ -100,7 +96,7 @@ export class TypingEngine {
       this.callbacks.onStart();
     }
     const expected = this.chars[this.pos];
-    const correct = e.key === expected;
+    const correct = char === expected;
     this.setState(this.pos, correct ? "correct" : "wrong");
     this.totalKeystrokes++;
     if (correct) this.correctKeystrokes++;
@@ -111,6 +107,16 @@ export class TypingEngine {
 
     if (this.pos >= this.chars.length) {
       this.finish(now);
+    }
+    return true;
+  }
+
+  backspace(): boolean {
+    if (this.finished) return false;
+    if (this.pos > 0) {
+      this.pos--;
+      this.setState(this.pos, "pending");
+      this.positionCaret();
     }
     return true;
   }

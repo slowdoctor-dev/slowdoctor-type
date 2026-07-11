@@ -12,6 +12,9 @@ import {
 } from "./words";
 import { GOAL_TRACKS, countsForDay, clampGoal, goalProgress, loadGoals, saveGoal } from "./goals";
 import { initAccount, accountModalOpen } from "./account";
+import { migrateStorage } from "./storage";
+
+migrateStorage();
 
 const TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
 const TRACK_KEY = "sdtype.track";
@@ -38,7 +41,6 @@ let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
 let isPractice = false;
 let track: string = localStorage.getItem(TRACK_KEY) ?? "news";
-if (track === "medical") track = "aesthetic"; // 2026-07-11 track rename
 if (!TRACKS.includes(track as (typeof TRACKS)[number])) track = "news";
 
 function recentIds(): number[] {
@@ -430,6 +432,26 @@ $("#d-close").addEventListener("click", () => {
   dashboardEl.hidden = true;
 });
 $("#d-practice").addEventListener("click", practiceWeakWords);
+
+// --- virtual keyboard (touch devices) ---
+// Tapping the text focuses an invisible input so the OS keyboard appears;
+// beforeinput events are translated into engine strokes and swallowed, so
+// the input itself never accumulates text. Physical keyboards are unaffected
+// (document keydown consumes them first).
+const kbdEl = $<HTMLInputElement>("#kbd");
+$("#stage").addEventListener("pointerdown", () => {
+  kbdEl.focus({ preventScroll: true });
+});
+kbdEl.addEventListener("beforeinput", (e) => {
+  const ev = e as InputEvent;
+  ev.preventDefault();
+  if (!engine) return;
+  if (ev.inputType === "deleteContentBackward") {
+    engine.backspace();
+  } else if ((ev.inputType === "insertText" || ev.inputType === "insertCompositionText") && ev.data) {
+    for (const ch of ev.data) engine.inputChar(ch);
+  }
+});
 dashboardEl.addEventListener("click", (e) => {
   if (e.target === dashboardEl) dashboardEl.hidden = true;
 });
