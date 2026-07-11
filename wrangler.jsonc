@@ -9,9 +9,11 @@
   "assets": {
     "directory": "web/dist"
   },
-  "workers_dev": true,
+  // Single public URL: custom domain only (workers.dev + preview URLs off).
   // Custom domains require zone and worker in the same account (API error 10083) —
   // deploys run via Workers Builds (Git integration) on the account that owns slowdoctor.dev.
+  "workers_dev": false,
+  "preview_urls": false,
   "routes": [{ "pattern": "type.slowdoctor.dev", "custom_domain": true }],
   "triggers": {
     // 21:00 UTC = 06:00 KST — daily VOA feed refresh
