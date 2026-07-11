@@ -1,5 +1,6 @@
 mod auth;
 mod feeder;
+mod http;
 
 use worker::*;
 

@@ -11,37 +11,9 @@
 //! If a source yields 0 items, fetch its feed by hand and re-derive the
 //! structure before touching this code.
 
-use crate::{decode_entities, normalize, p_blocks, tag_inner, word_count};
-
-pub struct WpItem {
-    pub title: String,
-    pub link: String,
-    pub pub_date: Option<String>,
-    /// Full article HTML from `<content:encoded>`, when the feed provides it.
-    pub content_html: Option<String>,
-}
-
-/// Parse a WordPress RSS feed, keeping the full-content body per item.
-pub fn parse_wp_items(xml: &str) -> Vec<WpItem> {
-    let mut items = Vec::new();
-    let mut rest = xml;
-    while let Some(start) = rest.find("<item>") {
-        let Some(end) = rest[start..].find("</item>") else {
-            break;
-        };
-        let block = &rest[start..start + end];
-        if let (Some(title), Some(link)) = (tag_inner(block, "title"), tag_inner(block, "link")) {
-            items.push(WpItem {
-                title: normalize(&decode_entities(&title)),
-                link: link.trim().to_string(),
-                pub_date: tag_inner(block, "pubDate").map(|d| d.trim().to_string()),
-                content_html: tag_inner(block, "content:encoded"),
-            });
-        }
-        rest = &rest[start + end + "</item>".len()..];
-    }
-    items
-}
+// Feed parsing is the shared `crate::parse_rss_items` — WordPress feeds are
+// plain RSS whose items carry the body in `content_html`.
+use crate::{p_blocks, word_count};
 
 /// Stable article id from a post URL: the last path segment (WP post slug).
 /// `https://www.nasa.gov/news-release/some-slug/` → `some-slug`.
@@ -138,7 +110,7 @@ mod tests {
 
     #[test]
     fn wp_items_carry_full_content() {
-        let items = parse_wp_items(FIXTURE);
+        let items = crate::parse_rss_items(FIXTURE);
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].title, "NASA's New Telescope Opens Its Eyes");
         assert_eq!(
@@ -151,7 +123,7 @@ mod tests {
 
     #[test]
     fn content_paragraphs_drop_boilerplate() {
-        let items = parse_wp_items(FIXTURE);
+        let items = crate::parse_rss_items(FIXTURE);
         let paras = extract_content_paragraphs(items[0].content_html.as_deref().unwrap());
         assert_eq!(paras.len(), 2, "got: {paras:?}");
         assert!(paras[0].starts_with("NASA's newest space telescope"));

@@ -100,12 +100,12 @@ pub async fn login(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let mut url = format!(
         "{}?response_type=code&client_id={}&redirect_uri={}&state={}",
         p.authorize,
-        urlencode(&client_id.to_string()),
-        urlencode(&redirect_uri),
+        crate::http::urlencode(&client_id.to_string()),
+        crate::http::urlencode(&redirect_uri),
         state
     );
     if !p.scope.is_empty() {
-        url.push_str(&format!("&scope={}", urlencode(p.scope)));
+        url.push_str(&format!("&scope={}", crate::http::urlencode(p.scope)));
     }
     let mode = if link { "link" } else { "login" };
     let mut resp = Response::redirect(Url::parse(&url)?)?;
@@ -143,12 +143,12 @@ pub async fn callback(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let client_secret = ctx.env.secret(p.secret_var)?.to_string();
     let token_body = format!(
         "grant_type=authorization_code&code={}&client_id={}&client_secret={}&redirect_uri={}",
-        urlencode(&code),
-        urlencode(&client_id),
-        urlencode(&client_secret),
-        urlencode(&callback_uri(&req, p.key)?)
+        crate::http::urlencode(&code),
+        crate::http::urlencode(&client_id),
+        crate::http::urlencode(&client_secret),
+        crate::http::urlencode(&callback_uri(&req, p.key)?)
     );
-    let token_json = http_post_form(p.token, &token_body).await?;
+    let token_json = crate::http::post_form(p.token, &token_body).await?;
     let Some(access_token) = token_json["access_token"].as_str() else {
         return Err(Error::RustError(format!("{}: no access_token", p.key)));
     };
@@ -374,9 +374,9 @@ async fn count_identities(db: &D1Database, user_id: i64) -> Result<i64> {
 async fn fetch_identity(provider: &str, access_token: &str) -> Result<(String, String)> {
     match provider {
         "google" => {
-            let v = http_get_json(
+            let v = crate::http::get_json(
                 "https://openidconnect.googleapis.com/v1/userinfo",
-                access_token,
+                Some(access_token),
             )
             .await?;
             let uid = v["sub"]
@@ -387,7 +387,7 @@ async fn fetch_identity(provider: &str, access_token: &str) -> Result<(String, S
             Ok((uid, name))
         }
         "kakao" => {
-            let v = http_get_json("https://kapi.kakao.com/v2/user/me", access_token).await?;
+            let v = crate::http::get_json("https://kapi.kakao.com/v2/user/me", Some(access_token)).await?;
             let uid = v["id"]
                 .as_i64()
                 .ok_or_else(|| Error::RustError("kakao: no id".into()))?
@@ -400,7 +400,7 @@ async fn fetch_identity(provider: &str, access_token: &str) -> Result<(String, S
             Ok((uid, name))
         }
         "github" => {
-            let v = http_get_json("https://api.github.com/user", access_token).await?;
+            let v = crate::http::get_json("https://api.github.com/user", Some(access_token)).await?;
             let uid = v["id"]
                 .as_i64()
                 .ok_or_else(|| Error::RustError("github: no id".into()))?
@@ -467,54 +467,5 @@ fn rand_hex(bytes: usize) -> String {
     buf.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn urlencode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() * 3);
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            }
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
-}
 
-async fn http_post_form(url: &str, body: &str) -> Result<serde_json::Value> {
-    let headers = Headers::new();
-    headers.set("content-type", "application/x-www-form-urlencoded")?;
-    headers.set("accept", "application/json")?; // github answers form-encoded otherwise
-    headers.set("user-agent", "slowdoctor-type/0.1 (https://type.slowdoctor.dev)")?;
-    let req = Request::new_with_init(
-        url,
-        RequestInit::new()
-            .with_method(Method::Post)
-            .with_headers(headers)
-            .with_body(Some(body.into())),
-    )?;
-    let mut resp = Fetch::Request(req).send().await?;
-    let text = resp.text().await?;
-    if resp.status_code() != 200 {
-        return Err(Error::RustError(format!("POST {url} -> {}", resp.status_code())));
-    }
-    serde_json::from_str(&text).map_err(|e| Error::RustError(format!("{url}: bad json: {e}")))
-}
 
-async fn http_get_json(url: &str, bearer: &str) -> Result<serde_json::Value> {
-    let headers = Headers::new();
-    headers.set("authorization", &format!("Bearer {bearer}"))?;
-    headers.set("accept", "application/json")?;
-    headers.set("user-agent", "slowdoctor-type/0.1 (https://type.slowdoctor.dev)")?;
-    let req = Request::new_with_init(
-        url,
-        RequestInit::new()
-            .with_method(Method::Get)
-            .with_headers(headers),
-    )?;
-    let mut resp = Fetch::Request(req).send().await?;
-    let text = resp.text().await?;
-    if resp.status_code() != 200 {
-        return Err(Error::RustError(format!("GET {url} -> {}", resp.status_code())));
-    }
-    serde_json::from_str(&text).map_err(|e| Error::RustError(format!("{url}: bad json: {e}")))
-}

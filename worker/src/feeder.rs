@@ -148,8 +148,8 @@ async fn feed_federal(
     feed: &str,
     report: &mut FeedReport,
 ) -> Result<()> {
-    let xml = http_get(feed).await?;
-    let items = extract::federal::parse_wp_items(&xml);
+    let xml = crate::http::get_text(feed).await?;
+    let items = extract::parse_rss_items(&xml);
     report.items_seen += items.len() as u32;
     let candidate_ids: Vec<String> = items
         .iter()
@@ -202,7 +202,7 @@ async fn feed_voa(
     program: &str,
     report: &mut FeedReport,
 ) -> Result<()> {
-    let xml = http_get(&format!("https://learningenglish.voanews.com/api/{zone}")).await?;
+    let xml = crate::http::get_text(&format!("https://learningenglish.voanews.com/api/{zone}")).await?;
     let items = extract::parse_rss_items(&xml);
     report.items_seen += items.len() as u32;
     let candidate_ids: Vec<String> = items
@@ -221,7 +221,7 @@ async fn feed_voa(
         if known.contains(&article_id) {
             continue;
         }
-        let html = match http_get(&item.link).await {
+        let html = match crate::http::get_text(&item.link).await {
             Ok(h) => h,
             Err(e) => {
                 report.errors.push(format!("{article_id}: {e}"));
@@ -253,9 +253,9 @@ async fn feed_voa(
 async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
     let search_url = format!(
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pmc&retmode=json&retmax={PMC_SEARCH_RETMAX}&sort=pub+date&term={}",
-        urlencode(PMC_QUERY)
+        crate::http::urlencode(PMC_QUERY)
     );
-    let body = http_get(&search_url).await?;
+    let body = crate::http::get_text(&search_url).await?;
     let v: serde_json::Value =
         serde_json::from_str(&body).map_err(|e| Error::RustError(format!("esearch json: {e}")))?;
     let ids: Vec<String> = v["esearchresult"]["idlist"]
@@ -284,7 +284,7 @@ async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
         "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?db=pmc&retmode=xml&id={}",
         unknown.join(",")
     );
-    let xml = http_get(&fetch_url).await?;
+    let xml = crate::http::get_text(&fetch_url).await?;
     let mut new_here = 0usize;
     for art in extract::pmc::parse_articleset(&xml) {
         if new_here >= MAX_NEW_PMC {
@@ -358,40 +358,4 @@ async fn store_article(db: &D1Database, meta: &ArticleMeta, passages: &[String])
     }
     db.batch(stmts).await?;
     Ok(())
-}
-
-/// Minimal RFC 3986 percent-encoding (unreserved chars kept).
-fn urlencode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() * 3);
-    for b in s.bytes() {
-        match b {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
-                out.push(b as char)
-            }
-            _ => out.push_str(&format!("%{b:02X}")),
-        }
-    }
-    out
-}
-
-async fn http_get(url: &str) -> Result<String> {
-    let headers = Headers::new();
-    headers.set(
-        "user-agent",
-        "slowdoctor-type/0.1 (personal typing trainer; https://type.slowdoctor.dev)",
-    )?;
-    let req = Request::new_with_init(
-        url,
-        RequestInit::new()
-            .with_method(Method::Get)
-            .with_headers(headers),
-    )?;
-    let mut resp = Fetch::Request(req).send().await?;
-    if resp.status_code() != 200 {
-        return Err(Error::RustError(format!(
-            "GET {url} -> {}",
-            resp.status_code()
-        )));
-    }
-    resp.text().await
 }

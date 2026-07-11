@@ -1,9 +1,12 @@
-//! VOA Learning English parsing: RSS items, article body extraction,
-//! normalization, and passage chunking.
+//! Source parsing for the feeder. This root module holds the shared text
+//! machinery — RSS item parsing (incl. `content:encoded` bodies), `<p>`
+//! extraction, entity decoding, normalization, passage chunking — plus the
+//! VOA-specific article contract; `pmc` and `federal` build on the same
+//! helpers for their sources.
 //!
 //! Dependency-free by design — keeps the wasm bundle small and compile times
-//! short. The trade-off is VOA-specific brittleness; the extraction contract
-//! (AGENTS.md) documents the live-verified DOM assumptions. If
+//! short. The trade-off is source-specific brittleness; the extraction
+//! contracts (AGENTS.md) document the live-verified assumptions. If
 //! `extract_paragraphs` starts returning nothing, re-derive the container
 //! from a live article before touching this code.
 
@@ -14,6 +17,9 @@ pub struct RssItem {
     pub title: String,
     pub link: String,
     pub pub_date: Option<String>,
+    /// Full article HTML from `<content:encoded>` when the feed provides it
+    /// (WordPress full-content feeds — see the `federal` module).
+    pub content_html: Option<String>,
 }
 
 /// Words per passage: flush once a chunk reaches MIN, never merge past MAX,
@@ -35,6 +41,7 @@ pub fn parse_rss_items(xml: &str) -> Vec<RssItem> {
                 title: normalize(&decode_entities(&title)),
                 link: link.trim().to_string(),
                 pub_date: tag_inner(block, "pubDate").map(|d| d.trim().to_string()),
+                content_html: tag_inner(block, "content:encoded"),
             });
         }
         rest = &rest[start + end + "</item>".len()..];

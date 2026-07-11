@@ -17,7 +17,7 @@ import {
 } from "../src/words.ts";
 
 import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
-import { parseAvatar, avatarSvg } from "../src/account.ts";
+import { parseAvatar, avatarSvg } from "../src/avatar.ts";
 
 let failures = 0;
 
