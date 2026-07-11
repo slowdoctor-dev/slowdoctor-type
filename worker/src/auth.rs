@@ -16,32 +16,30 @@ const SESSION_COOKIE: &str = "sdtype_session";
 const STATE_COOKIE: &str = "sdtype_oauth";
 const SESSION_DAYS: u32 = 30;
 
-/// Avatar = emoji × background hue, stored as `<emoji>|<hue 0-359>` and
-/// rendered client-side as a colored disc. Randomly assigned at signup;
-/// both parts customizable in the account panel (no image uploads).
-/// Keep in sync with AVATAR_EMOJIS in web/src/account.ts.
-const AVATAR_EMOJIS: &[&str] = &[
-    "⌨️", "🐢", "🦉", "🌿", "🌊", "⚡", "🔥", "🌙", "☕", "🩺", "🧠", "🌸",
-    "🐈", "🐕", "🦆", "🐧", "🍀", "🍊", "🎯", "🎹", "📚", "🚀", "🪐", "🧭",
-];
-
+/// Avatar = generated 8×8 mirrored pattern × background hue, stored as
+/// `<8 hex chars>|<hue 0-359>` (32 pattern bits; the client renders them as
+/// a symmetric identicon). Randomly assigned at signup; rerolled/customized
+/// in the account panel — no image uploads. Rendering lives in
+/// web/src/account.ts (`avatarSvg`). The 0006 migration's column default is
+/// a legacy placeholder; the server always writes an explicit value.
 fn random_avatar() -> String {
-    let mut buf = [0u8; 3];
+    let mut buf = [0u8; 6];
     getrandom::getrandom(&mut buf).expect("entropy");
-    let emoji = AVATAR_EMOJIS[buf[0] as usize % AVATAR_EMOJIS.len()];
-    let hue = (u32::from(buf[1]) << 8 | u32::from(buf[2])) % 360;
-    format!("{emoji}|{hue}")
+    let hue = (u32::from(buf[4]) << 8 | u32::from(buf[5])) % 360;
+    format!(
+        "{:02x}{:02x}{:02x}{:02x}|{hue}",
+        buf[0], buf[1], buf[2], buf[3]
+    )
 }
 
-/// `<emoji>|<hue>` — an emoji (possibly a ZWJ sequence) plus 0..=359.
+/// `<8 hex chars>|<hue 0-359>`.
 fn valid_avatar(avatar: &str) -> bool {
-    let Some((emoji, hue)) = avatar.split_once('|') else {
+    let Some((hex, hue)) = avatar.split_once('|') else {
         return false;
     };
-    let emoji_ok =
-        !emoji.is_empty() && emoji.chars().count() <= 4 && !emoji.chars().any(|c| c.is_ascii());
+    let hex_ok = hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit());
     let hue_ok = hue.parse::<u32>().map(|h| h < 360).unwrap_or(false);
-    emoji_ok && hue_ok
+    hex_ok && hue_ok
 }
 
 struct Provider {

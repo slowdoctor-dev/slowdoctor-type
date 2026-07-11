@@ -17,7 +17,7 @@ import {
 } from "../src/words.ts";
 
 import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
-import { parseAvatar } from "../src/account.ts";
+import { parseAvatar, avatarSvg } from "../src/account.ts";
 
 let failures = 0;
 
@@ -145,10 +145,12 @@ eq("goals: progress unmet", goalProgress(1, 3), { text: "1/3", met: false });
 eq("goals: progress met", goalProgress(3, 3), { text: "3/3 ✓", met: true });
 eq("goals: no goal set", goalProgress(5, 0), null);
 
-// --- avatar (emoji × hue combo) ---
-eq("avatar: parse", parseAvatar("🦉|210"), { emoji: "🦉", hue: 210 });
-eq("avatar: junk falls back to default", parseAvatar("junk"), { emoji: "⌨️", hue: 160 });
-eq("avatar: hue wraps into 0-359", parseAvatar("🐢|540"), { emoji: "🐢", hue: 180 });
+// --- avatar (8×8 pattern × hue combo) ---
+eq("avatar: parse", parseAvatar("a1b2c3d4|210"), { bits: 0xa1b2c3d4, hue: 210 });
+eq("avatar: junk falls back to default", parseAvatar("junk"), { bits: 0x3c5a7e42, hue: 160 });
+eq("avatar: hue wraps into 0-359", parseAvatar("00ff00ff|540"), { bits: 0x00ff00ff, hue: 180 });
+const svg = avatarSvg("80000001|200"); // bit 0 → row 0 col 0 (+mirror), bit 31 → row 7 col 3 (+mirror)
+eq("avatar: svg mirrors cells", (svg.match(/<rect x=/g) ?? []).length, 4); // 2 set bits × 2 mirrored cells
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
