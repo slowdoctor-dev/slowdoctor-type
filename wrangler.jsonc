@@ -9,6 +9,10 @@
   "assets": {
     "directory": "web/dist"
   },
+  "workers_dev": true,
+  // type.slowdoctor.dev custom domain is blocked from this Cloudflare account:
+  // the slowdoctor.dev zone lives on a different account (API error 10083).
+  // Attach it by deploying from the zone-owning account, or via that account's dashboard.
   "triggers": {
     // 21:00 UTC = 06:00 KST — daily VOA feed refresh
     "crons": ["0 21 * * *"]
@@ -17,8 +21,7 @@
     {
       "binding": "DB",
       "database_name": "slowdoctor-type",
-      // placeholder — replace with the id from `npx wrangler d1 create slowdoctor-type`
-      "database_id": "REPLACE_AFTER_D1_CREATE"
+      "database_id": "72aefac6-5cb0-4f64-b226-f370df18b0ff"
     }
   ],
   "observability": {
