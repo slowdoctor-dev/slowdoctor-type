@@ -23,7 +23,7 @@ struct ResultIn {
     duration_ms: i64,
 }
 
-const TRACKS: &[&str] = &["news", "daily", "medical", "classic"];
+const TRACKS: &[&str] = &["news", "daily", "aesthetic", "federal"];
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {

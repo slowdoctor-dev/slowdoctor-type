@@ -12,7 +12,7 @@ import {
 } from "./words";
 import { GOAL_TRACKS, countsForDay, clampGoal, goalProgress, loadGoals, saveGoal } from "./goals";
 
-const TRACKS = ["news", "daily", "medical", "classic"] as const;
+const TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
 const TRACK_KEY = "sdtype.track";
 const RECENT_KEY = "sdtype.recent";
 const RECENT_MAX = 15;
@@ -37,6 +37,7 @@ let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
 let isPractice = false;
 let track: string = localStorage.getItem(TRACK_KEY) ?? "news";
+if (track === "medical") track = "aesthetic"; // 2026-07-11 track rename
 if (!TRACKS.includes(track as (typeof TRACKS)[number])) track = "news";
 
 function recentIds(): number[] {

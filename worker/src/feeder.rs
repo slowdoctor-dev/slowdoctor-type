@@ -1,9 +1,11 @@
 //! Daily feeder: openly licensed sources → passages in D1.
 //! Runs from the cron trigger and from POST /api/feed (token-guarded).
 //!
-//! Sources: VOA Learning English RSS (`news`, public domain) and PMC
-//! open-access CC BY abstracts (`medical`). `classic` is a static Gutenberg
-//! seed shipped as a D1 migration, not fed here.
+//! Sources: VOA Learning English RSS (`news`, public domain), PMC open-access
+//! CC BY abstracts (`aesthetic` — derm/plastic-surgery papers), and U.S.
+//! federal WordPress feeds with full-content bodies (`federal`, public
+//! domain). `daily` is a static authored seed shipped as a D1 migration,
+//! not fed here.
 
 use worker::*;
 
@@ -13,6 +15,18 @@ pub const VOA_FEEDS: &[(&str, &str)] = &[
     ("zmg_pl-vomx-tpeymtm", "Science & Technology"),
     ("zmmpql-vomx-tpey-_q", "Health & Lifestyle"),
     ("zpyp_l-vomx-tpe_rym", "Arts & Culture"),
+];
+
+/// `federal` sources: (source key, attribution program, WP feed URL).
+/// WordPress full-content feeds only — see extract::federal contract notes.
+/// NOAA (Drupal, no full-content feed) is deliberately deferred.
+pub const FEDERAL_FEEDS: &[(&str, &str, &str)] = &[
+    ("nasa", "NASA", "https://www.nasa.gov/feed/"),
+    (
+        "shareamerica",
+        "ShareAmerica — U.S. Department of State",
+        "https://share.america.gov/feed/",
+    ),
 ];
 
 /// PMC E-utilities contract verified live 2026-07-10 (see extract::pmc docs).
@@ -57,7 +71,61 @@ pub async fn run(env: &Env) -> Result<FeedReport> {
         Ok(()) => report.feeds_ok += 1,
         Err(e) => report.errors.push(format!("pmc: {e}")),
     }
+    for (source, program, feed) in FEDERAL_FEEDS {
+        match feed_federal(&db, source, program, feed, &mut report).await {
+            Ok(()) => report.feeds_ok += 1,
+            Err(e) => report.errors.push(format!("federal/{source}: {e}")),
+        }
+    }
     Ok(report)
+}
+
+async fn feed_federal(
+    db: &D1Database,
+    source: &'static str,
+    program: &str,
+    feed: &str,
+    report: &mut FeedReport,
+) -> Result<()> {
+    let xml = http_get(feed).await?;
+    let mut new_here = 0usize;
+    for item in extract::federal::parse_wp_items(&xml) {
+        report.items_seen += 1;
+        if new_here >= MAX_NEW_ARTICLES_PER_FEED {
+            break;
+        }
+        let Some(slug) = extract::federal::slug_from_link(&item.link) else {
+            continue;
+        };
+        let id = format!("{source}-{slug}");
+        if article_exists(db, &id).await? {
+            continue;
+        }
+        // full-content feeds only: no body in the feed → not our kind of post
+        let Some(content) = &item.content_html else {
+            continue;
+        };
+        let passages =
+            extract::chunk_passages(&extract::federal::extract_content_paragraphs(content));
+        if passages.is_empty() {
+            continue; // gallery/video post or feed drift — skip, don't record
+        }
+        let meta = ArticleMeta {
+            id,
+            url: item.link.clone(),
+            title: item.title.clone(),
+            source,
+            track: "federal",
+            license: "public-domain",
+            attribution: format!("{program} (public domain)"),
+            published_at: item.pub_date.clone(),
+        };
+        store_article(db, &meta, &passages).await?;
+        report.articles_new += 1;
+        report.passages_new += passages.len() as u32;
+        new_here += 1;
+    }
+    Ok(())
 }
 
 async fn feed_voa(
@@ -159,7 +227,7 @@ async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
             url: format!("https://pmc.ncbi.nlm.nih.gov/articles/PMC{}/", art.pmcid),
             title: art.title.clone(),
             source: "pmc",
-            track: "medical",
+            track: "aesthetic",
             license: "cc-by",
             attribution: format!("{author} et al., {} ({year}) — CC BY", art.journal),
             published_at: art.year.clone(),

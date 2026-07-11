@@ -5,7 +5,7 @@ Canonical context for any LLM coding agent working in this repo. `CLAUDE.md` poi
 ## What this is
 
 A public, single-purpose typing trainer for the owner (a doctor studying English):
-type openly licensed, well-written English passages (news / medical / classic prose).
+type openly licensed, well-written English passages (news / everyday / paper-abstract / federal prose).
 Bootstrapped 2026-07-10 from the LEAD workspace design brief
 (`lead/1-workspace/_inbox/2026-07-10_typing-trainer-brief.md`); this repo is standalone —
 do not read or write the LEAD workspace from here.
@@ -15,13 +15,13 @@ do not read or write the LEAD workspace from here.
 1. Separate repo under github `slowdoctor-dev`, deployed at **type.slowdoctor.dev**, linked from slowdoctor.dev (Next.js site — stacks never touch).
 2. **Public** deployment → feed may only contain **public-domain or CC BY** text, attribution rendered under every passage. No copyrighted sources, ever. Personal history stays in localStorage (no accounts). A cross-device history would be an Access-gated path later, not auth code.
 3. **Rust hybrid**: workers-rs backend (API + cron feeder + D1), TypeScript browser UI. UI stays TS — do not port the DOM layer to WASM frameworks.
-4. **PMC medical-English track = switchable option**: `track` tag exists in the schema from day one (`news` / `daily` / `medical` / `classic`); the UI source toggle persists in localStorage.
+4. **PMC paper-English track = switchable option**: `track` tag exists in the schema from day one; the UI source toggle persists in localStorage. **Track lineup amended 2026-07-11 (Director)**: now `news` / `daily` / `aesthetic` / `federal` — `classic` (Gutenberg) retired, `medical` renamed `aesthetic` (it is derm/plastic-surgery paper abstracts, not patient-facing health info), `federal` added (modern-English U.S. government works; migration `0005`).
 5. **Design: minimal, monkeytype-like** (Director 2026-07-11): quiet text buttons, chrome fades while typing (`body.typing`), muted dark palette with the sage accent kept for brand. `daily` track = authored everyday chat/reply English (original, CC0) — the register the Director actually writes in.
 
 ## Architecture
 
 - `worker/` — workers-rs crate. `#[event(fetch)]` router: `GET /api/passages`, `POST /api/results`, `GET /api/health`, `POST /api/feed` (Bearer `FEED_TOKEN` guard). `#[event(scheduled)]` daily feeder (cron `0 21 * * *` UTC = 06:00 KST).
-- `extract/` — VOA-specific parsing as its own dependency-free crate (no scraper/feed-rs; keeps wasm small, and host-runnable tests don't pull the wasm-only `worker` dep). Unit-tested against fixture snippets.
+- `extract/` — source parsing (VOA in `lib.rs`, PMC JATS in `pmc.rs`, federal WordPress feeds in `federal.rs`) as its own dependency-free crate (no scraper/feed-rs; keeps wasm small, and host-runnable tests don't pull the wasm-only `worker` dep). Unit-tested against fixture snippets.
 - `scoring/` — canonical scoring formulas + tests. **Parity rule**: `web/src/scoring.ts` mirrors these formulas exactly; change both together or not at all. (Planned P2: compile this crate to wasm-bindgen and delete the TS mirror.)
 - `web/` — Vite + vanilla TS, zero runtime dependencies. Built `web/dist` is served via Workers static assets; unmatched routes (`/api/*`) fall through to the Worker.
 - `migrations/` — D1 SQL, applied with `wrangler d1 migrations apply DB [--local|--remote]`.
@@ -34,6 +34,14 @@ do not read or write the LEAD workspace from here.
 - Normalize at ingest so passages are typeable: curly quotes → straight, en/em dash → `-`, ellipsis → `...`, NBSP → space, collapse whitespace.
 - RSS `<description>` is summary-only — full text always requires the article fetch.
 - If extraction starts returning 0 paragraphs, VOA changed their DOM: re-derive the container from a live article before touching code.
+
+## Federal extraction contract (written 2026-07-11 — NOT yet live-verified)
+
+- Sources are WordPress sites whose RSS carries the **full body in `<content:encoded>`** — no article-page fetch, no per-site DOM contract: NASA `https://www.nasa.gov/feed/`, ShareAmerica `https://share.america.gov/feed/`. NOAA deferred (Drupal, no full-content feed).
+- Article id = `<source>-<WP post slug>` (last URL path segment). Items without `content:encoded`, or whose cleaned body chunks to 0 passages (galleries, videos), are skipped without being recorded.
+- Paragraph cleanup drops government press boilerplate: credit/caption lines, media contacts, "learn more"/link paragraphs, anything containing `@`/`http`/`www.` (see `extract::federal::is_body_paragraph`).
+- ⚠️ Written against the standard WP feed format because the dev container had no egress to these hosts (2026-07-11). **Verify on the first cron run**: `/api/health` should show `federal > 0`. If a source stays at 0, fetch its feed by hand, fix the contract, and update this section + the fixtures.
+- License note: both sources are U.S. government works (public domain). ShareAmerica occasionally runs externally authored pieces — the `this article was written` boilerplate filter drops their credit line, and if such pieces turn out to carry non-PD notices, drop the source rather than filtering per-article.
 
 ## Conventions
 
@@ -62,6 +70,8 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 - **P2a (2026-07-11)**: ✅ `daily` track (authored CC0 everyday-reply passages, `migrations/0004`); ✅ mistyped-word tracking (`web/src/words.ts`: per-word miss/seen in localStorage, corrected errors count) + problem-word chips + weak-word practice mode (word-soup from your misses; practice results stay out of the server aggregate); ✅ monkeytype-like minimal redesign + focus fade; ✅ `?embed=1` (hides header/footer — for the slowdoctor.dev iframe); ✅ zero-dep TS selftest (`npm test` = node --experimental-strip-types, scoring parity vectors + words logic); ✅ `no-store` on API responses, `articles(track)` index, broader PMC query.
 - **P2b (2026-07-11)**: ✅ GitHub Actions CI running the quality gates on push/PR (`.github/workflows/ci.yml`); ✅ spaced-repetition scheduling for weak words (SM-2-lite in `web/src/words.ts`: a miss makes the word due immediately, each correct encounter of a missed word schedules the next review 1/3/7/14/30 days out; the practice pool takes due words first and tops up with worst misses; dashboard chips highlight due words; pre-SRS localStorage entries count as due); ✅ per-track daily goals (`web/src/goals.ts` + dashboard editor, `sdtype.goals` in localStorage, today's per-track progress with met-goal accent).
 - **P2c (open)**: scoring crate → wasm-bindgen module replacing the TS mirror — was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
+- **P3 (2026-07-11)**: ✅ track rework (Director): `classic` retired, `medical` → `aesthetic`, `federal` added — NASA + ShareAmerica WordPress full-content feeds, migration `0005`, localStorage track value migrated in `main.ts`. Federal contract pending live verification (see its section).
+- **P4 (open, Director 2026-07-11)**: passage difficulty — compute a readability score (Flesch-Kincaid grade) at ingest (`fk_grade` column on passages), then a practice-settings panel: **multi-select tracks + FK score range**, with the picker serving matching passages randomly but **evenly distributed** across the selected pool (not biased toward the biggest track).
 
 ## Deploy state
 

@@ -6,7 +6,7 @@ export type Goals = Record<string, number>; // track -> tests per day (0/absent 
 
 const KEY = "sdtype.goals";
 
-export const GOAL_TRACKS = ["news", "daily", "medical", "classic"] as const;
+export const GOAL_TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
 
 /** Tests per track completed on `day` (YYYY-MM-DD, UTC slice of the ISO stamp). */
 export function countsForDay(

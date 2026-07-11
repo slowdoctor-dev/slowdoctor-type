@@ -7,6 +7,7 @@
 //! `extract_paragraphs` starts returning nothing, re-derive the container
 //! from a live article before touching this code.
 
+pub mod federal;
 pub mod pmc;
 
 pub struct RssItem {
@@ -74,7 +75,7 @@ pub fn extract_paragraphs(html: &str) -> Vec<String> {
 }
 
 /// All `<p>…</p>` blocks in `html`, tag-stripped, entity-decoded, normalized.
-fn p_blocks(html: &str) -> Vec<String> {
+pub(crate) fn p_blocks(html: &str) -> Vec<String> {
     let mut paragraphs = Vec::new();
     let mut rest = html;
     while let Some(p_start) = find_tag_open(rest, "p") {
@@ -242,7 +243,7 @@ fn strip_tags(html: &str) -> String {
     out
 }
 
-fn decode_entities(text: &str) -> String {
+pub(crate) fn decode_entities(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;
     while let Some(amp) = rest.find('&') {
@@ -300,7 +301,7 @@ fn decode_entity(name: &str) -> Option<String> {
 }
 
 /// Inner text of the first `<tag>…</tag>` in `block`, unwrapping CDATA.
-fn tag_inner(block: &str, tag: &str) -> Option<String> {
+pub(crate) fn tag_inner(block: &str, tag: &str) -> Option<String> {
     let open = find_tag_open(block, tag)?;
     let gt = block[open..].find('>')? + open;
     let close = block[gt + 1..].find(&format!("</{tag}>"))? + gt + 1;

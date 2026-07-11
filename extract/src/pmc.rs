@@ -1,4 +1,4 @@
-//! PMC (PubMed Central) JATS XML parsing for the `medical` track.
+//! PMC (PubMed Central) JATS XML parsing for the `aesthetic` track.
 //!
 //! Same dependency-free philosophy as the VOA parser. Contract verified live
 //! 2026-07-10 against efetch db=pmc retmode=xml:

@@ -1,8 +1,8 @@
 # slowdoctor-type
 
 Personal typing trainer with an English-study angle: practice by typing well-written,
-openly licensed English prose — current news and (optionally) medical abstracts —
-instead of random word soup.
+openly licensed English prose — current news, everyday replies, paper abstracts, and
+U.S. federal features — instead of random word soup.
 
 Live target: **https://type.slowdoctor.dev** (linked from [slowdoctor.dev](https://slowdoctor.dev)).
 
@@ -32,8 +32,8 @@ and every passage renders its attribution + link to the full article.
 |---|---|---|
 | `news` | VOA Learning English (As It Is, Science & Tech, Health & Lifestyle, Arts & Culture) — daily feed | Public domain (credit to learningenglish.voanews.com) |
 | `daily` | Everyday chat/email/reply English — authored for this project, static seed | Original content (CC0) |
-| `medical` | PMC Open Access, strictly CC BY-filtered derm/plastic-surgery abstracts — daily feed | CC BY (attribution rendered per passage) |
-| `classic` | Project Gutenberg verbatim extracts (Thoreau, Emerson, Russell, Franklin) — static seed migration | Public domain |
+| `aesthetic` | PMC Open Access, strictly CC BY-filtered derm/plastic-surgery abstracts — daily feed | CC BY (attribution rendered per passage) |
+| `federal` | U.S. federal features: NASA + ShareAmerica full-content feeds — daily feed | Public domain (U.S. government works) |
 
 ## Develop
 
