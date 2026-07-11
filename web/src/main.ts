@@ -2,7 +2,7 @@
 // results), and wiring for the dashboard/account panels and input sources.
 
 import "./style.css";
-import { $ } from "./dom";
+import { $, cssVar } from "./dom";
 import { getPassage, postResult, type Passage } from "./api";
 import { FALLBACK_PASSAGE } from "./fallback";
 import { TypingEngine, type TestResult } from "./engine";
@@ -184,7 +184,7 @@ function drawChart(perSecond: number[], netWpm: number): void {
   const y = (v: number) => h - pad - (v / max) * (h - 2 * pad);
 
   // net-wpm reference line
-  ctx.strokeStyle = "#5c6370";
+  ctx.strokeStyle = cssVar("--dim");
   ctx.setLineDash([4, 4]);
   ctx.beginPath();
   ctx.moveTo(pad, y(netWpm));
@@ -193,7 +193,7 @@ function drawChart(perSecond: number[], netWpm: number): void {
   ctx.setLineDash([]);
 
   // per-second raw pace
-  ctx.strokeStyle = "#7fb4a2";
+  ctx.strokeStyle = cssVar("--accent");
   ctx.lineWidth = 2;
   ctx.beginPath();
   perSecond.forEach((v, i) => {

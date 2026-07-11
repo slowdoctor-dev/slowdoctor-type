@@ -1,7 +1,7 @@
 // History dashboard: summary, daily goals, problem-word chips, weak-word
 // practice launcher, daily WPM/accuracy chart, recent-tests table.
 
-import { $ } from "./dom";
+import { $, cssVar } from "./dom";
 import type { Passage } from "./api";
 import { loadHistory, summary, type HistoryEntry } from "./history";
 import { buildPracticeText, problemWords, reviewQueue } from "./words";
@@ -184,11 +184,11 @@ function drawHistoryChart(entries: HistoryEntry[]): void {
       ctx.fill();
     }
   };
-  drawLine((p) => p.acc, yAcc, "#5c6370", [4, 4]);
-  drawLine((p) => p.wpm, yWpm, "#7fb4a2", []);
+  drawLine((p) => p.acc, yAcc, cssVar("--dim"), [4, 4]);
+  drawLine((p) => p.wpm, yWpm, cssVar("--accent"), []);
 
   const last = points[points.length - 1];
-  ctx.fillStyle = "#7fb4a2";
+  ctx.fillStyle = cssVar("--accent");
   ctx.font = "12px ui-monospace, monospace";
   ctx.fillText(`${Math.round(last.wpm)} wpm`, Math.max(pad, w - 70), yWpm(last.wpm) - 6);
 }

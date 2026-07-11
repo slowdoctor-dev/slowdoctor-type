@@ -1,12 +1,38 @@
+/* Palette mirrors slowdoctor.dev (globals.css there is the reference):
+   near-black bg, #ededed fg, #888 muted, warm gold accent #b59768. */
 :root {
-  --bg: #232528;
-  --surface: #2c2e31;
-  --fg: #d1d0c5;
-  --dim: #646669;
-  --accent: #7fb4a2;
+  --bg: #0a0a0a;
+  --surface: #161616;
+  --fg: #ededed;
+  --dim: #888888;
+  --accent: #b59768;
+  --accent-muted: rgba(181, 151, 104, 0.15);
+  --border: rgba(255, 255, 255, 0.1);
   --error: #ca4754;
   --line-height: 2.3rem;
   font-size: 16px;
+}
+
+/* Self-hosted fonts, vendored from slowdoctor-web (Inter & Plus Jakarta
+   Sans, both OFL). Chrome text uses them; the typing stage stays mono. */
+@font-face {
+  font-family: "Inter";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("/fonts/inter-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Plus Jakarta Sans";
+  font-style: normal;
+  font-weight: 200 800;
+  font-display: swap;
+  src: url("/fonts/plus-jakarta-sans-latin.woff2") format("woff2");
+}
+
+::selection {
+  background: var(--accent-muted);
+  color: var(--fg);
 }
 
 * {
@@ -18,8 +44,22 @@
 body {
   background: var(--bg);
   color: var(--fg);
-  font-family: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  /* chrome text follows slowdoctor.dev (Inter); the typing stage itself
+     stays monospace via --font-mono below */
+  font-family: "Inter", system-ui, sans-serif;
   min-height: 100vh;
+}
+
+:root {
+  --font-mono: ui-monospace, "Cascadia Code", "JetBrains Mono", Menlo, Consolas, monospace;
+  --font-heading: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+}
+
+#words,
+#kbd,
+kbd,
+.live {
+  font-family: var(--font-mono);
 }
 
 #app {
@@ -64,6 +104,7 @@ header {
 }
 
 .brand {
+  font-family: var(--font-heading);
   font-size: 1.05rem;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -236,7 +277,7 @@ kbd {
   color: var(--dim);
   opacity: 0.7;
   font-size: 0.7em;
-  border: 1px solid #3a3d41;
+  border: 1px solid var(--border);
   border-radius: 3px;
   padding: 0 0.3em;
   margin-left: 0.35em;
@@ -255,7 +296,7 @@ kbd {
 #account {
   position: fixed;
   inset: 0;
-  background: rgba(20, 21, 23, 0.88);
+  background: rgba(0, 0, 0, 0.85);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -336,8 +377,13 @@ kbd {
 }
 
 .dash-title {
+  font-family: var(--font-heading);
   color: var(--accent);
   font-size: 0.9rem;
+}
+
+.stat.big span {
+  font-family: var(--font-heading);
 }
 
 #d-close,
@@ -376,7 +422,7 @@ kbd {
 }
 
 #account-btn.signed-out {
-  border: 1px solid #3a3d41;
+  border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.25rem 0.7rem;
 }
@@ -520,7 +566,7 @@ kbd {
 
 .chip.due {
   color: var(--accent);
-  box-shadow: inset 0 0 0 1px rgba(127, 180, 162, 0.45);
+  box-shadow: inset 0 0 0 1px var(--accent);
 }
 
 /* invisible but focusable — brings up the virtual keyboard on touch devices;
@@ -605,7 +651,7 @@ kbd {
   color: var(--dim);
   font-weight: 400;
   padding: 0.25rem 0.5rem;
-  border-bottom: 1px solid #3a3d41;
+  border-bottom: 1px solid var(--border);
 }
 
 #d-recent td {
