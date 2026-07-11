@@ -40,6 +40,7 @@ do not read or write the LEAD workspace from here.
 - Commit messages: `{YYYY-MM-DD} {English summary}` (no Conventional Commits, no Co-Authored-By).
 - Keep the frontend dependency-free at runtime; dev-deps are Vite + TypeScript only.
 - `cargo test -p scoring -p extract`, `cd web && npm test` (scoring-parity + words-logic selftest), and `npm run build` must pass before any push.
+- **Run-verification screenshots** (Director standing request, 2026-07-11): after substantive changes, run the app (`wrangler dev`) and capture screenshots of the main screens — typing view, results, dashboard — and show them to the Director as proof it runs.
 - Builds on WSL DrvFs are slow: set `CARGO_TARGET_DIR=~/.cache/slowdoctor-type-target` (an untracked `.cargo/config.toml` does this on the original WSL machine; recreate as needed — machine-specific, deliberately not committed).
 - `cargo install worker-build` needs OpenSSL headers; on the original WSL box (no sudo, no libssl-dev) they live in a user-space extract: `export OPENSSL_INCLUDE_DIR=~/.local/openssl-dev/usr/include OPENSSL_LIB_DIR=~/.local/openssl-dev/usr/lib/x86_64-linux-gnu OPENSSL_STATIC=1` (created 2026-07-10 via `apt-get download libssl-dev` + `dpkg -x`). Normal machines: just install `pkg-config libssl-dev`.
 
