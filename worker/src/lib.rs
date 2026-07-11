@@ -23,7 +23,7 @@ struct ResultIn {
     duration_ms: i64,
 }
 
-const TRACKS: &[&str] = &["news", "medical", "classic"];
+const TRACKS: &[&str] = &["news", "daily", "medical", "classic"];
 
 #[event(fetch)]
 async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
@@ -53,9 +53,9 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             for r in rows {
                 tracks.insert(r.track, serde_json::json!(r.n));
             }
-            Response::from_json(&serde_json::json!({
+            no_store(Response::from_json(&serde_json::json!({
                 "ok": true, "articles": articles, "passages": passages, "tracks": tracks
-            }))
+            }))?)
         })
         .get_async("/api/passages", |req, ctx| async move {
             let url = req.url()?;
@@ -77,13 +77,14 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 .bind(&[track.as_str().into()])?
                 .first::<Passage>(None)
                 .await?;
-            match row {
+            let resp = match row {
                 Some(p) => Response::from_json(&serde_json::json!({ "passage": p })),
                 None => Response::from_json(&serde_json::json!({
                     "passage": null,
                     "hint": "track is empty — run the feeder (POST /api/feed) or wait for the daily cron"
                 })),
-            }
+            }?;
+            no_store(resp)
         })
         .post_async("/api/results", |mut req, ctx| async move {
             let Ok(r) = req.json::<ResultIn>().await else {
@@ -143,6 +144,12 @@ async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
         ),
         Err(e) => console_error!("feeder failed: {e}"),
     }
+}
+
+/// Random-passage and count responses must never be cached by intermediaries.
+fn no_store(mut resp: Response) -> Result<Response> {
+    resp.headers_mut().set("cache-control", "no-store")?;
+    Ok(resp)
 }
 
 async fn count(db: &D1Database, table: &str) -> Result<i64> {

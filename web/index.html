@@ -19,13 +19,14 @@
         <div class="brand">slowdoctor<span class="brand-accent">·type</span></div>
         <nav id="tracks" aria-label="text source">
           <button data-track="news" type="button">news</button>
+          <button data-track="daily" type="button">daily</button>
           <button data-track="medical" type="button">medical</button>
           <button data-track="classic" type="button">classic</button>
         </nav>
-        <div class="live"><span id="live-wpm">—</span> wpm · <span id="live-acc">—</span>%</div>
       </header>
 
       <main>
+        <div class="live"><span id="live-wpm">—</span><span class="live-unit"> wpm</span> <span id="live-acc">—</span><span class="live-unit">%</span></div>
         <div id="stage">
           <div id="words" aria-label="text to type"></div>
         </div>
@@ -66,6 +67,8 @@
             <button id="d-close" type="button">close <kbd>esc</kbd></button>
           </div>
           <div id="d-summary" class="results-attr"></div>
+          <div id="d-words" class="chips"></div>
+          <button id="d-practice" type="button">practice weak words</button>
           <canvas id="d-chart" width="560" height="140"></canvas>
           <table id="d-recent">
             <thead>

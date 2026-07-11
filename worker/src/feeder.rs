@@ -16,12 +16,12 @@ pub const VOA_FEEDS: &[(&str, &str)] = &[
 ];
 
 /// PMC E-utilities contract verified live 2026-07-10 (see extract::pmc docs).
-const PMC_QUERY: &str = r#"(dermatology OR "plastic surgery" OR "skin rejuvenation" OR "laser therapy") AND "open access"[filter]"#;
-const PMC_SEARCH_RETMAX: usize = 25;
+const PMC_QUERY: &str = r#"(dermatology OR "plastic surgery" OR "skin rejuvenation" OR "laser therapy" OR "aesthetic medicine" OR "wound healing" OR "scar treatment") AND "open access"[filter]"#;
+const PMC_SEARCH_RETMAX: usize = 40;
 
 /// Politeness/cost caps per run.
 const MAX_NEW_ARTICLES_PER_FEED: usize = 5;
-const MAX_NEW_PMC: usize = 5;
+const MAX_NEW_PMC: usize = 8;
 const MAX_EFETCH_IDS: usize = 8;
 
 #[derive(serde::Serialize, Default)]

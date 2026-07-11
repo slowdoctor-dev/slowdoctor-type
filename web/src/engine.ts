@@ -9,9 +9,12 @@ export interface TestResult {
   correctChars: number;
   typedChars: number;
   perSecondRaw: number[];
+  /** Char positions that ever received a wrong keystroke (even if corrected). */
+  wrongIndices: number[];
 }
 
 export interface EngineCallbacks {
+  onStart(): void;
   onProgress(liveWpm: number, liveAcc: number): void;
   onFinish(result: TestResult): void;
 }
@@ -36,6 +39,7 @@ export class TypingEngine {
   private correctKeystrokes = 0;
   private totalKeystrokes = 0;
   private keystrokeTimes: number[] = [];
+  private wrongEver = new Set<number>();
   private readonly spans: HTMLSpanElement[] = [];
   private readonly caret: HTMLDivElement;
   private caretMoveTimer: number | undefined;
@@ -93,12 +97,14 @@ export class TypingEngine {
     if (this.startedAt === null) {
       this.startedAt = now;
       this.startProgressTicker();
+      this.callbacks.onStart();
     }
     const expected = this.chars[this.pos];
     const correct = e.key === expected;
     this.setState(this.pos, correct ? "correct" : "wrong");
     this.totalKeystrokes++;
     if (correct) this.correctKeystrokes++;
+    else this.wrongEver.add(this.pos);
     this.keystrokeTimes.push(now - this.startedAt);
     this.pos++;
     this.positionCaret();
@@ -169,6 +175,7 @@ export class TypingEngine {
       correctChars,
       typedChars: this.totalKeystrokes,
       perSecondRaw: this.perSecondRaw(durationMs),
+      wrongIndices: [...this.wrongEver],
     };
     this.callbacks.onFinish(result);
   }

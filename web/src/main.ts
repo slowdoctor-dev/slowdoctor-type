@@ -3,9 +3,17 @@ import { getPassage, postResult, type Passage } from "./api";
 import { FALLBACK_PASSAGE } from "./fallback";
 import { TypingEngine, type TestResult } from "./engine";
 import { loadHistory, saveResult, summary, type HistoryEntry } from "./history";
+import {
+  buildPracticeText,
+  computeMissedWords,
+  problemWords,
+  recordTest,
+} from "./words";
 
-const TRACKS = ["news", "medical", "classic"] as const;
+const TRACKS = ["news", "daily", "medical", "classic"] as const;
 const TRACK_KEY = "sdtype.track";
+const RECENT_KEY = "sdtype.recent";
+const RECENT_MAX = 15;
 
 const $ = <T extends HTMLElement>(sel: string): T => {
   const el = document.querySelector<T>(sel);
@@ -25,8 +33,23 @@ const dashboardEl = $("#dashboard");
 
 let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
+let isPractice = false;
 let track: string = localStorage.getItem(TRACK_KEY) ?? "news";
 if (!TRACKS.includes(track as (typeof TRACKS)[number])) track = "news";
+
+function recentIds(): number[] {
+  try {
+    return JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as number[];
+  } catch {
+    return [];
+  }
+}
+
+function pushRecent(id: number): void {
+  const ids = recentIds().filter((x) => x !== id);
+  ids.push(id);
+  localStorage.setItem(RECENT_KEY, JSON.stringify(ids.slice(-RECENT_MAX)));
+}
 
 function setLive(wpm: number | null, acc: number | null): void {
   liveWpmEl.textContent = wpm === null ? "—" : String(Math.round(wpm));
@@ -44,16 +67,20 @@ function renderTrackButtons(): void {
   });
 }
 
-function startTest(passage: Passage): void {
+function startTest(passage: Passage, practice = false): void {
   engine?.destroy();
   currentPassage = passage;
+  isPractice = practice;
   resultsEl.hidden = true;
+  document.body.classList.remove("typing");
   setLive(null, null);
   attributionEl.textContent = passage.attribution;
   articleLinkEl.href = passage.url;
   articleLinkEl.hidden = !passage.url;
+  if (passage.id !== null && !practice) pushRecent(passage.id);
 
   engine = new TypingEngine(passage.text, wordsEl, {
+    onStart: () => document.body.classList.add("typing"),
     onProgress: setLive,
     onFinish: showResults,
   });
@@ -63,6 +90,7 @@ async function nextPassage(): Promise<void> {
   engine?.destroy();
   engine = null;
   resultsEl.hidden = true;
+  document.body.classList.remove("typing");
   setLive(null, null);
   wordsEl.classList.add("loading");
   wordsEl.textContent = "loading…";
@@ -70,7 +98,12 @@ async function nextPassage(): Promise<void> {
   articleLinkEl.hidden = true;
 
   try {
-    const res = await getPassage(track);
+    let res = await getPassage(track);
+    // avoid a recently seen passage (one re-roll is enough)
+    if (res.passage?.id !== null && res.passage && recentIds().includes(res.passage.id as number)) {
+      const retry = await getPassage(track);
+      if (retry.passage) res = retry;
+    }
     if (res.passage) {
       startTest(res.passage);
     } else {
@@ -85,6 +118,7 @@ async function nextPassage(): Promise<void> {
 }
 
 function showResults(result: TestResult): void {
+  document.body.classList.remove("typing");
   $("#r-wpm").textContent = String(Math.round(result.wpm));
   $("#r-acc").textContent = `${result.accuracy.toFixed(1)}%`;
   $("#r-raw").textContent = String(Math.round(result.rawWpm));
@@ -104,26 +138,38 @@ function showResults(result: TestResult): void {
   drawChart(result.perSecondRaw, result.wpm);
   resultsEl.hidden = false;
 
+  const at = new Date().toISOString();
   saveResult({
-    at: new Date().toISOString(),
+    at,
     wpm: result.wpm,
     rawWpm: result.rawWpm,
     accuracy: result.accuracy,
     consistency: result.consistency,
     durationMs: result.durationMs,
-    track,
+    track: isPractice ? "practice" : track,
     passageId: currentPassage?.id ?? null,
   });
   renderHistStrip();
 
-  postResult({
-    passage_id: currentPassage?.id ?? null,
-    wpm: result.wpm,
-    raw_wpm: result.rawWpm,
-    accuracy: result.accuracy,
-    consistency: result.consistency,
-    duration_ms: result.durationMs,
-  });
+  if (currentPassage) {
+    recordTest(
+      currentPassage.text,
+      computeMissedWords(currentPassage.text, result.wrongIndices),
+      at,
+    );
+  }
+
+  // practice runs are word-soup — keep them out of the aggregate stats
+  if (!isPractice) {
+    postResult({
+      passage_id: currentPassage?.id ?? null,
+      wpm: result.wpm,
+      raw_wpm: result.rawWpm,
+      accuracy: result.accuracy,
+      consistency: result.consistency,
+      duration_ms: result.durationMs,
+    });
+  }
 }
 
 function drawChart(perSecond: number[], netWpm: number): void {
@@ -188,9 +234,45 @@ function openDashboard(): void {
   dashboardEl.hidden = false;
 }
 
+function practiceWeakWords(): void {
+  const words = problemWords(12).map((w) => w.word);
+  if (words.length < 3) return;
+  dashboardEl.hidden = true;
+  startTest(
+    {
+      id: null,
+      text: buildPracticeText(words),
+      word_count: 42,
+      title: "weak words",
+      url: "",
+      attribution: "weak-word practice — built from your recent misses",
+      track: "practice",
+    },
+    true,
+  );
+}
+
 function renderDashboard(): void {
   const all = loadHistory();
   $("#d-summary").textContent = all.length ? summary() : "no tests yet — type something first";
+
+  const words = problemWords(12);
+  const chipBox = $("#d-words");
+  chipBox.textContent = "";
+  const practiceBtn = $<HTMLButtonElement>("#d-practice");
+  if (words.length === 0) {
+    chipBox.textContent = "no problem words yet — misses show up here after a few tests";
+    practiceBtn.disabled = true;
+  } else {
+    for (const w of words) {
+      const chip = document.createElement("span");
+      chip.className = "chip";
+      chip.textContent = w.word;
+      chip.title = `missed ${w.miss}× of ${w.seen}`;
+      chipBox.append(chip);
+    }
+    practiceBtn.disabled = words.length < 3;
+  }
 
   const tbody = $("#d-recent tbody");
   tbody.textContent = "";
@@ -298,6 +380,7 @@ $("#stats-btn").addEventListener("click", (e) => {
 $("#d-close").addEventListener("click", () => {
   dashboardEl.hidden = true;
 });
+$("#d-practice").addEventListener("click", practiceWeakWords);
 dashboardEl.addEventListener("click", (e) => {
   if (e.target === dashboardEl) dashboardEl.hidden = true;
 });
@@ -339,6 +422,9 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+if (new URLSearchParams(location.search).has("embed")) {
+  document.body.classList.add("embed");
+}
 renderTrackButtons();
 renderHistStrip();
 void loadTrackCounts();
