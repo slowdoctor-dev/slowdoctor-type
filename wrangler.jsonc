@@ -10,9 +10,11 @@
     "directory": "web/dist"
   },
   "workers_dev": true,
-  // type.slowdoctor.dev custom domain is blocked from this Cloudflare account:
-  // the slowdoctor.dev zone lives on a different account (API error 10083).
-  // Attach it by deploying from the zone-owning account, or via that account's dashboard.
+  // Deploy ONLY from the Cloudflare account that owns the slowdoctor.dev zone —
+  // custom domains require zone and worker in the same account (API error 10083).
+  // The 2026-07-11 deploy to leadprs.seoul@gmail.com's account was deleted for this reason.
+  // Once logged into the right account, restore:
+  //   "routes": [{ "pattern": "type.slowdoctor.dev", "custom_domain": true }]
   "triggers": {
     // 21:00 UTC = 06:00 KST — daily VOA feed refresh
     "crons": ["0 21 * * *"]
@@ -21,7 +23,8 @@
     {
       "binding": "DB",
       "database_name": "slowdoctor-type",
-      "database_id": "72aefac6-5cb0-4f64-b226-f370df18b0ff"
+      // placeholder — replace with the id from `npx wrangler d1 create slowdoctor-type`
+      "database_id": "REPLACE_AFTER_D1_CREATE"
     }
   ],
   "observability": {
