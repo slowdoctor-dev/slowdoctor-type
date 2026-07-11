@@ -53,4 +53,7 @@ do not read or write the LEAD workspace from here.
 
 ## Deploy state
 
-- Created 2026-07-10; **not yet deployed** — `database_id` in `wrangler.jsonc` is a placeholder until `wrangler d1 create slowdoctor-type` runs. Follow README "Deploy (first time)".
+- Created 2026-07-10; development split into this independent environment 2026-07-11 (Director decision). The LEAD workspace no longer tracks this project beyond its design brief.
+- **Not yet on GitHub** — repo creation was blocked for the agent (human must pick visibility). First action for the Director or a new session:
+  `/home/leadprs/bin/gh auth switch -u slowdoctor-dev && /home/leadprs/bin/gh repo create slowdoctor-dev/slowdoctor-type --private --source . --push && /home/leadprs/bin/gh auth switch -u leadprs-clinic` (swap `--private` for `--public` if preferred; the site footer's "source" link assumes public eventually).
+- **Not yet deployed** — `database_id` in `wrangler.jsonc` is a placeholder until `wrangler d1 create slowdoctor-type` runs. Follow README "Deploy (first time)". Local dev D1 (`.wrangler/`, untracked) is already migrated and seeded on the original WSL machine.
