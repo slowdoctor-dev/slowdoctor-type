@@ -77,7 +77,68 @@ pub async fn run(env: &Env) -> Result<FeedReport> {
             Err(e) => report.errors.push(format!("federal/{source}: {e}")),
         }
     }
+    if let Err(e) = housekeeping(&db, &report).await {
+        report.errors.push(format!("housekeeping: {e}"));
+    }
     Ok(report)
+}
+
+/// Per-run upkeep: record the run for /api/health observability (VOA DOM
+/// drift shows up as articles_new=0 / errors), prune old log rows, and drop
+/// expired auth sessions.
+async fn housekeeping(db: &D1Database, report: &FeedReport) -> Result<()> {
+    db.prepare(
+        "INSERT INTO feed_log (feeds_ok, items_seen, articles_new, passages_new, errors) \
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+    )
+    .bind(&[
+        (report.feeds_ok as f64).into(),
+        (report.items_seen as f64).into(),
+        (report.articles_new as f64).into(),
+        (report.passages_new as f64).into(),
+        serde_json::to_string(&report.errors).unwrap_or_default().into(),
+    ])?
+    .run()
+    .await?;
+    db.prepare(
+        "DELETE FROM feed_log WHERE id NOT IN (SELECT id FROM feed_log ORDER BY id DESC LIMIT 60)",
+    )
+    .run()
+    .await?;
+    db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
+        .run()
+        .await?;
+    Ok(())
+}
+
+/// Which of `ids` already exist in `articles` — one query instead of N.
+async fn existing_ids(
+    db: &D1Database,
+    ids: &[String],
+) -> Result<std::collections::HashSet<String>> {
+    let mut found = std::collections::HashSet::new();
+    if ids.is_empty() {
+        return Ok(found);
+    }
+    let placeholders = (1..=ids.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    #[derive(serde::Deserialize)]
+    struct Row {
+        id: String,
+    }
+    let binds: Vec<wasm_bindgen::JsValue> = ids.iter().map(|s| s.as_str().into()).collect();
+    let rows = db
+        .prepare(&format!("SELECT id FROM articles WHERE id IN ({placeholders})"))
+        .bind(&binds)?
+        .all()
+        .await?
+        .results::<Row>()?;
+    for r in rows {
+        found.insert(r.id);
+    }
+    Ok(found)
 }
 
 async fn feed_federal(
@@ -88,9 +149,16 @@ async fn feed_federal(
     report: &mut FeedReport,
 ) -> Result<()> {
     let xml = http_get(feed).await?;
+    let items = extract::federal::parse_wp_items(&xml);
+    report.items_seen += items.len() as u32;
+    let candidate_ids: Vec<String> = items
+        .iter()
+        .filter_map(|i| extract::federal::slug_from_link(&i.link))
+        .map(|slug| format!("{source}-{slug}"))
+        .collect();
+    let known = existing_ids(db, &candidate_ids).await?;
     let mut new_here = 0usize;
-    for item in extract::federal::parse_wp_items(&xml) {
-        report.items_seen += 1;
+    for item in items {
         if new_here >= MAX_NEW_ARTICLES_PER_FEED {
             break;
         }
@@ -98,7 +166,7 @@ async fn feed_federal(
             continue;
         };
         let id = format!("{source}-{slug}");
-        if article_exists(db, &id).await? {
+        if known.contains(&id) {
             continue;
         }
         // full-content feeds only: no body in the feed → not our kind of post
@@ -135,16 +203,22 @@ async fn feed_voa(
     report: &mut FeedReport,
 ) -> Result<()> {
     let xml = http_get(&format!("https://learningenglish.voanews.com/api/{zone}")).await?;
+    let items = extract::parse_rss_items(&xml);
+    report.items_seen += items.len() as u32;
+    let candidate_ids: Vec<String> = items
+        .iter()
+        .filter_map(|i| extract::text_article_id(&i.link))
+        .collect();
+    let known = existing_ids(db, &candidate_ids).await?;
     let mut new_here = 0usize;
-    for item in extract::parse_rss_items(&xml) {
-        report.items_seen += 1;
+    for item in items {
         if new_here >= MAX_NEW_ARTICLES_PER_FEED {
             break;
         }
         let Some(article_id) = extract::text_article_id(&item.link) else {
             continue; // audio-only or foreign link
         };
-        if article_exists(db, &article_id).await? {
+        if known.contains(&article_id) {
             continue;
         }
         let html = match http_get(&item.link).await {
@@ -194,15 +268,14 @@ async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
         .unwrap_or_default();
     report.items_seen += ids.len() as u32;
 
-    let mut unknown = Vec::new();
-    for pmcid in &ids {
-        if unknown.len() >= MAX_EFETCH_IDS {
-            break;
-        }
-        if !article_exists(db, &format!("pmc-{pmcid}")).await? {
-            unknown.push(pmcid.clone());
-        }
-    }
+    let candidate_ids: Vec<String> = ids.iter().map(|p| format!("pmc-{p}")).collect();
+    let known = existing_ids(db, &candidate_ids).await?;
+    let unknown: Vec<String> = ids
+        .iter()
+        .filter(|p| !known.contains(&format!("pmc-{p}")))
+        .take(MAX_EFETCH_IDS)
+        .cloned()
+        .collect();
     if unknown.is_empty() {
         return Ok(());
     }
@@ -240,50 +313,50 @@ async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
     Ok(())
 }
 
-async fn article_exists(db: &D1Database, id: &str) -> Result<bool> {
-    let row = db
-        .prepare("SELECT 1 AS x FROM articles WHERE id = ?1")
-        .bind(&[id.into()])?
-        .first::<serde_json::Value>(None)
-        .await?;
-    Ok(row.is_some())
-}
-
+/// Article + passages in one atomic D1 batch — a partial write would make
+/// the dedup check skip the article forever with half its passages missing.
 async fn store_article(db: &D1Database, meta: &ArticleMeta, passages: &[String]) -> Result<()> {
-    db.prepare(
-        "INSERT INTO articles (id, url, title, source, track, license, attribution, published_at, fetched_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
-    )
-    .bind(&[
-        meta.id.as_str().into(),
-        meta.url.as_str().into(),
-        meta.title.as_str().into(),
-        meta.source.into(),
-        meta.track.into(),
-        meta.license.into(),
-        meta.attribution.as_str().into(),
-        match &meta.published_at {
-            Some(d) => d.as_str().into(),
-            None => wasm_bindgen::JsValue::NULL,
-        },
-    ])?
-    .run()
-    .await?;
-
-    for (seq, text) in passages.iter().enumerate() {
+    // only http(s) source links ever reach the UI's "read the full story" anchor
+    let url = if meta.url.starts_with("https://") || meta.url.starts_with("http://") {
+        meta.url.as_str()
+    } else {
+        ""
+    };
+    let mut stmts = Vec::with_capacity(passages.len() + 1);
+    stmts.push(
         db.prepare(
-            "INSERT OR IGNORE INTO passages (article_id, seq, text, word_count) \
-             VALUES (?1, ?2, ?3, ?4)",
+            "INSERT INTO articles (id, url, title, source, track, license, attribution, published_at, fetched_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
         )
         .bind(&[
             meta.id.as_str().into(),
-            (seq as f64).into(),
-            text.as_str().into(),
-            (extract::word_count(text) as f64).into(),
-        ])?
-        .run()
-        .await?;
+            url.into(),
+            meta.title.as_str().into(),
+            meta.source.into(),
+            meta.track.into(),
+            meta.license.into(),
+            meta.attribution.as_str().into(),
+            match &meta.published_at {
+                Some(d) => d.as_str().into(),
+                None => wasm_bindgen::JsValue::NULL,
+            },
+        ])?,
+    );
+    for (seq, text) in passages.iter().enumerate() {
+        stmts.push(
+            db.prepare(
+                "INSERT OR IGNORE INTO passages (article_id, seq, text, word_count) \
+                 VALUES (?1, ?2, ?3, ?4)",
+            )
+            .bind(&[
+                meta.id.as_str().into(),
+                (seq as f64).into(),
+                text.as_str().into(),
+                (extract::word_count(text) as f64).into(),
+            ])?,
+        );
     }
+    db.batch(stmts).await?;
     Ok(())
 }
 

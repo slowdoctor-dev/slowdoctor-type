@@ -79,8 +79,27 @@ fn pmcid_of(block: &str) -> Option<String> {
     Some(digits.to_string())
 }
 
+/// Only links inside `<license>` blocks count — a CC BY URL cited in the
+/// body or references of a non-CC-BY article must not qualify it.
 fn is_cc_by(block: &str) -> bool {
     let mut rest = block;
+    while let Some(at) = crate::find_tag_open(rest, "license") {
+        let after = &rest[at..];
+        let end = after.find("</license>").unwrap_or(after.len());
+        if cc_link_grants_reuse(&after[..end]) {
+            return true;
+        }
+        rest = &after[end..];
+        match rest.find('>') {
+            Some(gt) => rest = &rest[gt + 1..],
+            None => break,
+        }
+    }
+    false
+}
+
+fn cc_link_grants_reuse(license_block: &str) -> bool {
+    let mut rest = license_block;
     while let Some(at) = rest.find("creativecommons.org/licenses/") {
         let tail = &rest[at + "creativecommons.org/licenses/".len()..];
         let code: String = tail
@@ -93,7 +112,7 @@ fn is_cc_by(block: &str) -> bool {
         rest = tail;
     }
     // CC0 dedications are also fine for a public typing feed
-    block.contains("creativecommons.org/publicdomain/")
+    license_block.contains("creativecommons.org/publicdomain/")
 }
 
 fn abstract_paragraphs(block: &str) -> Vec<String> {
@@ -171,9 +190,22 @@ mod tests {
 
     #[test]
     fn prefix_by_variants_rejected() {
-        assert!(!is_cc_by(r#"href="http://creativecommons.org/licenses/by-nc/4.0/""#));
-        assert!(!is_cc_by(r#"href="http://creativecommons.org/licenses/by-nd/4.0/""#));
-        assert!(is_cc_by(r#"href="https://creativecommons.org/licenses/by/3.0/""#));
-        assert!(is_cc_by(r#"href="https://creativecommons.org/publicdomain/zero/1.0/""#));
+        let lic = |href: &str| format!(r#"<license><p href="{href}">x</p></license>"#);
+        assert!(!is_cc_by(&lic("http://creativecommons.org/licenses/by-nc/4.0/")));
+        assert!(!is_cc_by(&lic("http://creativecommons.org/licenses/by-nd/4.0/")));
+        assert!(is_cc_by(&lic("https://creativecommons.org/licenses/by/3.0/")));
+        assert!(is_cc_by(&lic("https://creativecommons.org/publicdomain/zero/1.0/")));
+    }
+
+    #[test]
+    fn cc_link_outside_license_block_does_not_qualify() {
+        // a CC BY URL cited in the article body must not grant reuse
+        assert!(!is_cc_by(
+            r#"<body><p>see http://creativecommons.org/licenses/by/4.0/ for details</p></body>"#
+        ));
+        // and <license-p> alone (no <license> wrapper) is not a license block
+        assert!(!is_cc_by(
+            r#"<license-p href="http://creativecommons.org/licenses/by/4.0/">x</license-p>"#
+        ));
     }
 }

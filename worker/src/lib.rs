@@ -54,8 +54,19 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
             for r in rows {
                 tracks.insert(r.track, serde_json::json!(r.n));
             }
+            // latest feeder run — articles_new stuck at 0 or errors piling up
+            // means a source contract drifted (see AGENTS.md extraction notes)
+            let last_feed = db
+                .prepare(
+                    "SELECT at, feeds_ok, items_seen, articles_new, passages_new, errors \
+                     FROM feed_log ORDER BY id DESC LIMIT 1",
+                )
+                .first::<serde_json::Value>(None)
+                .await
+                .unwrap_or(None);
             no_store(Response::from_json(&serde_json::json!({
-                "ok": true, "articles": articles, "passages": passages, "tracks": tracks
+                "ok": true, "articles": articles, "passages": passages, "tracks": tracks,
+                "last_feed": last_feed
             }))?)
         })
         .get_async("/api/passages", |req, ctx| async move {
@@ -100,6 +111,24 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
                 return Response::error("result out of range", 400);
             }
             let db = ctx.env.d1("DB")?;
+            // server-side plausibility: the claimed pace cannot meaningfully
+            // exceed what the referenced passage allows in the claimed time.
+            // Client stats stay client-computed; this only rejects nonsense.
+            if let Some(pid) = r.passage_id {
+                let wc = db
+                    .prepare("SELECT word_count AS wc FROM passages WHERE id = ?1")
+                    .bind(&[(pid as f64).into()])?
+                    .first::<serde_json::Value>(None)
+                    .await?
+                    .and_then(|v| v.get("wc").and_then(|n| n.as_i64()));
+                let Some(wc) = wc else {
+                    return Response::error("unknown passage", 400);
+                };
+                let implied_wpm = wc as f64 / (r.duration_ms as f64 / 60_000.0);
+                if implied_wpm > 400.0 || r.wpm > implied_wpm * 1.5 + 10.0 {
+                    return Response::error("result implausible", 400);
+                }
+            }
             let user_id = auth::session_user_id(&db, &req).await?; // for future ranking
             db.prepare(
                 "INSERT INTO results (passage_id, wpm, raw_wpm, accuracy, consistency, duration_ms, user_id) \
@@ -131,7 +160,11 @@ async fn fetch(req: Request, env: Env, _ctx: Context) -> Result<Response> {
         .get_async("/api/me", auth::me)
         .post_async("/api/me", auth::update_me)
         .post_async("/api/feed", |req, ctx| async move {
-            let expected = format!("Bearer {}", ctx.env.secret("FEED_TOKEN")?);
+            // intentionally-unset token is "not configured", not a server bug
+            let Ok(token) = ctx.env.secret("FEED_TOKEN") else {
+                return Response::error("feed token not configured", 503);
+            };
+            let expected = format!("Bearer {token}");
             let got = req.headers().get("authorization")?.unwrap_or_default();
             if got != expected {
                 return Response::error("unauthorized", 401);
@@ -158,8 +191,8 @@ async fn scheduled(_event: ScheduledEvent, env: Env, _ctx: ScheduleContext) {
     }
 }
 
-/// Random-passage and count responses must never be cached by intermediaries.
-fn no_store(mut resp: Response) -> Result<Response> {
+/// Random-passage, count, and session-scoped responses must never be cached.
+pub(crate) fn no_store(mut resp: Response) -> Result<Response> {
     resp.headers_mut().set("cache-control", "no-store")?;
     Ok(resp)
 }

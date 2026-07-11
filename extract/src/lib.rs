@@ -313,7 +313,7 @@ pub(crate) fn tag_inner(block: &str, tag: &str) -> Option<String> {
     Some(inner.to_string())
 }
 
-fn find_tag_open(html: &str, tag: &str) -> Option<usize> {
+pub(crate) fn find_tag_open(html: &str, tag: &str) -> Option<usize> {
     let mut from = 0;
     let needle = format!("<{tag}");
     while let Some(pos) = html[from..].find(&needle) {

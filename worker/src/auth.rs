@@ -251,7 +251,7 @@ pub async fn unlink(req: Request, ctx: RouteContext<()>) -> Result<Response> {
 pub async fn me(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let db = ctx.env.d1("DB")?;
     let Some(user_id) = session_user_id(&db, &req).await? else {
-        return Response::from_json(&serde_json::json!({ "user": null }));
+        return crate::no_store(Response::from_json(&serde_json::json!({ "user": null }))?);
     };
     let user = db
         .prepare("SELECT nickname, avatar FROM users WHERE id = ?1")
@@ -271,7 +271,9 @@ pub async fn me(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .into_iter()
         .map(|i| i.provider)
         .collect();
-    Response::from_json(&serde_json::json!({ "user": user, "providers": providers }))
+    crate::no_store(Response::from_json(
+        &serde_json::json!({ "user": user, "providers": providers }),
+    )?)
 }
 
 /// POST /api/me — update nickname and/or emoji avatar.
