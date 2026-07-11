@@ -4,7 +4,19 @@
 // and the pure word-tracking logic. DOM/localStorage code is not exercised.
 
 import { wpm, rawWpm, accuracy, consistency } from "../src/scoring.ts";
-import { keyOf, passageWords, computeMissedWords, buildPracticeText } from "../src/words.ts";
+import {
+  keyOf,
+  passageWords,
+  computeMissedWords,
+  buildPracticeText,
+  updateStat,
+  isDue,
+  dueWords,
+  addDays,
+  type WordStat,
+} from "../src/words.ts";
+
+import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
 
 let failures = 0;
 
@@ -74,6 +86,63 @@ eq(
   ["alpha", "beta", "gamma"],
 );
 eq("practice empty input", buildPracticeText([], 10), "");
+
+// --- spaced repetition ---
+const t0 = "2026-07-11T00:00:00.000Z";
+const missed1 = updateStat(undefined, true, t0);
+eq("srs: first miss counts", [missed1.miss, missed1.seen, missed1.streak], [1, 1, 0]);
+eq("srs: miss is due immediately", missed1.due, t0);
+eq("srs: missed word is due now", isDue(missed1, t0), true);
+
+const hit1 = updateStat(missed1, false, t0);
+eq("srs: first correct schedules +1d", hit1.due, addDays(t0, 1));
+eq("srs: not due before schedule", isDue(hit1, addDays(t0, 0.5)), false);
+eq("srs: due once schedule passes", isDue(hit1, addDays(t0, 1)), true);
+
+const hit2 = updateStat(hit1, false, addDays(t0, 1));
+eq("srs: second correct schedules +3d", hit2.due, addDays(addDays(t0, 1), 3));
+
+let capped = missed1;
+for (let i = 0; i < 9; i++) capped = updateStat(capped, false, t0);
+eq("srs: interval caps at 30d", capped.due, addDays(t0, 30));
+
+const remiss = updateStat(hit2, true, addDays(t0, 2));
+eq("srs: a miss resets streak and is due now", [remiss.streak, remiss.due], [0, addDays(t0, 2)]);
+
+const clean = updateStat(undefined, false, t0);
+eq("srs: never-missed word has no schedule", clean.due, undefined);
+eq("srs: never-missed word never due", isDue(clean, addDays(t0, 99)), false);
+
+const legacy: WordStat = { miss: 2, seen: 3, last: t0 }; // pre-SRS entry without `due`
+eq("srs: legacy missed entry counts as due", isDue(legacy, t0), true);
+
+const stats = {
+  aaa: { miss: 1, seen: 2, last: t0, streak: 1, due: addDays(t0, 1) },
+  bbb: { miss: 3, seen: 3, last: t0, streak: 0, due: t0 },
+  ccc: { miss: 1, seen: 1, last: t0, streak: 0, due: addDays(t0, 5) },
+};
+eq(
+  "srs: dueWords filters and orders most-overdue first",
+  dueWords(stats, addDays(t0, 2)).map((w) => w.word),
+  ["bbb", "aaa"],
+);
+
+// --- daily goals ---
+const hist = [
+  { at: "2026-07-11T01:00:00.000Z", track: "news" },
+  { at: "2026-07-11T02:00:00.000Z", track: "news" },
+  { at: "2026-07-11T03:00:00.000Z", track: "daily" },
+  { at: "2026-07-10T23:00:00.000Z", track: "news" }, // previous day
+];
+eq("goals: counts per track for a day", countsForDay(hist, "2026-07-11"), { news: 2, daily: 1 });
+eq("goals: empty day", countsForDay(hist, "2026-07-09"), {});
+eq("goals: clamp negative", clampGoal(-3), 0);
+eq("goals: clamp fraction", clampGoal(2.7), 2);
+eq("goals: clamp huge", clampGoal(1000), 99);
+eq("goals: clamp NaN", clampGoal(Number.NaN), 0);
+eq("goals: progress unmet", goalProgress(1, 3), { text: "1/3", met: false });
+eq("goals: progress met", goalProgress(3, 3), { text: "3/3 ✓", met: true });
+eq("goals: no goal set", goalProgress(5, 0), null);
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);

@@ -8,7 +8,9 @@ import {
   computeMissedWords,
   problemWords,
   recordTest,
+  reviewQueue,
 } from "./words";
+import { GOAL_TRACKS, countsForDay, clampGoal, goalProgress, loadGoals, saveGoal } from "./goals";
 
 const TRACKS = ["news", "daily", "medical", "classic"] as const;
 const TRACK_KEY = "sdtype.track";
@@ -234,8 +236,18 @@ function openDashboard(): void {
   dashboardEl.hidden = false;
 }
 
+/** Practice pool: words due for review first, topped up with the worst misses. */
+function practicePool(limit = 12): string[] {
+  const words = reviewQueue(limit).map((w) => w.word);
+  for (const w of problemWords(limit)) {
+    if (words.length >= limit) break;
+    if (!words.includes(w.word)) words.push(w.word);
+  }
+  return words;
+}
+
 function practiceWeakWords(): void {
-  const words = problemWords(12).map((w) => w.word);
+  const words = practicePool();
   if (words.length < 3) return;
   dashboardEl.hidden = true;
   startTest(
@@ -252,26 +264,61 @@ function practiceWeakWords(): void {
   );
 }
 
+function renderGoals(): void {
+  const box = $("#d-goals");
+  box.textContent = "";
+  const goals = loadGoals();
+  const counts = countsForDay(loadHistory(), new Date().toISOString().slice(0, 10));
+  for (const t of GOAL_TRACKS) {
+    const row = document.createElement("div");
+    row.className = "goal-row";
+    const name = document.createElement("span");
+    name.className = "goal-track";
+    name.textContent = t;
+    const input = document.createElement("input");
+    input.type = "number";
+    input.min = "0";
+    input.max = "99";
+    input.value = String(goals[t] ?? 0);
+    input.setAttribute("aria-label", `daily goal for ${t}`);
+    input.addEventListener("change", () => {
+      saveGoal(t, clampGoal(Number(input.value)));
+      renderGoals();
+    });
+    const progress = document.createElement("span");
+    const p = goalProgress(counts[t] ?? 0, goals[t] ?? 0);
+    progress.className = p?.met ? "goal-progress met" : "goal-progress";
+    progress.textContent = p ? p.text : "—";
+    row.append(name, input, progress);
+    box.append(row);
+  }
+}
+
 function renderDashboard(): void {
   const all = loadHistory();
   $("#d-summary").textContent = all.length ? summary() : "no tests yet — type something first";
+  renderGoals();
 
+  const now = new Date().toISOString();
   const words = problemWords(12);
+  const due = new Set(reviewQueue(12, now).map((w) => w.word));
   const chipBox = $("#d-words");
   chipBox.textContent = "";
   const practiceBtn = $<HTMLButtonElement>("#d-practice");
-  if (words.length === 0) {
+  if (words.length === 0 && due.size === 0) {
     chipBox.textContent = "no problem words yet — misses show up here after a few tests";
     practiceBtn.disabled = true;
   } else {
     for (const w of words) {
       const chip = document.createElement("span");
-      chip.className = "chip";
+      chip.className = due.has(w.word) ? "chip due" : "chip";
       chip.textContent = w.word;
-      chip.title = `missed ${w.miss}× of ${w.seen}`;
+      const next =
+        w.due && w.due > now ? ` · next review ${w.due.slice(0, 10)}` : " · due for review";
+      chip.title = `missed ${w.miss}× of ${w.seen}${next}`;
       chipBox.append(chip);
     }
-    practiceBtn.disabled = words.length < 3;
+    practiceBtn.disabled = practicePool().length < 3;
   }
 
   const tbody = $("#d-recent tbody");

@@ -6,12 +6,65 @@ export interface WordStat {
   miss: number;
   seen: number;
   last: string; // ISO datetime of last encounter
+  // Spaced repetition (v2), present once a word has been missed:
+  streak?: number; // consecutive correct encounters since the last miss
+  due?: string; // ISO datetime of the next review; absent on a missed word = due now
 }
 
 export type WordStats = Record<string, WordStat>;
 
 const KEY = "sdtype.words";
 const MAX_TRACKED = 400;
+
+/** Review intervals in days by streak (1st correct after a miss → 1 day, then 3, 7…). */
+export const INTERVALS_DAYS = [1, 3, 7, 14, 30] as const;
+
+const DAY_MS = 86_400_000;
+
+export function addDays(iso: string, days: number): string {
+  return new Date(new Date(iso).getTime() + days * DAY_MS).toISOString();
+}
+
+/**
+ * Fold one encounter into a word's stat (pure; SM-2-lite).
+ * A miss resets the streak and makes the word due immediately; each correct
+ * encounter of a previously missed word pushes the next review further out.
+ */
+export function updateStat(prev: WordStat | undefined, missed: boolean, at: string): WordStat {
+  const s: WordStat = { miss: 0, seen: 0, ...prev, last: at };
+  s.seen++;
+  if (missed) {
+    s.miss++;
+    s.streak = 0;
+    s.due = at;
+  } else if (s.miss > 0) {
+    s.streak = (s.streak ?? 0) + 1;
+    s.due = addDays(at, INTERVALS_DAYS[Math.min(s.streak, INTERVALS_DAYS.length) - 1]);
+  }
+  return s;
+}
+
+/** A word is reviewable once missed; no `due` (pre-SRS data) counts as due now. */
+export function isDue(s: WordStat, now: string): boolean {
+  return s.miss > 0 && (s.due ?? "") <= now;
+}
+
+/** Due words, most overdue first (ties: worse miss rate first). */
+export function dueWords(
+  stats: WordStats,
+  now: string,
+  limit = 12,
+): { word: string; miss: number; seen: number; due: string }[] {
+  return Object.entries(stats)
+    .filter(([, s]) => isDue(s, now))
+    .sort(([, a], [, b]) => {
+      const byDue = (a.due ?? "").localeCompare(b.due ?? "");
+      if (byDue !== 0) return byDue;
+      return b.miss / Math.max(b.seen, 1) - a.miss / Math.max(a.seen, 1);
+    })
+    .slice(0, limit)
+    .map(([word, s]) => ({ word, miss: s.miss, seen: s.seen, due: s.due ?? now }));
+}
 
 /** Canonical key for a typed word; null when not worth tracking. */
 export function keyOf(word: string): string | null {
@@ -109,29 +162,32 @@ function saveWordStats(stats: WordStats): void {
   }
 }
 
-/** Update stats after a completed test. */
+/** Update stats after a completed test (misses reset the review schedule, hits extend it). */
 export function recordTest(text: string, missedWords: string[], at: string): void {
   const stats = loadWordStats();
+  const missed = new Set(missedWords);
   for (const w of passageWords(text)) {
-    const s = stats[w] ?? { miss: 0, seen: 0, last: at };
-    s.seen++;
-    s.last = at;
-    stats[w] = s;
-  }
-  for (const w of missedWords) {
-    const s = stats[w] ?? { miss: 0, seen: 1, last: at };
-    s.miss++;
-    stats[w] = s;
+    stats[w] = updateStat(stats[w], missed.has(w), at);
   }
   saveWordStats(stats);
 }
 
 /** Worst words: missed at least twice, weighted by miss rate and recency. */
-export function problemWords(limit = 12): { word: string; miss: number; seen: number }[] {
+export function problemWords(
+  limit = 12,
+): { word: string; miss: number; seen: number; due?: string }[] {
   const stats = loadWordStats();
   return Object.entries(stats)
     .filter(([, s]) => s.miss >= 2)
     .sort((a, b) => b[1].miss / Math.max(b[1].seen, 1) - a[1].miss / Math.max(a[1].seen, 1))
     .slice(0, limit)
-    .map(([word, s]) => ({ word, miss: s.miss, seen: s.seen }));
+    .map(([word, s]) => ({ word, miss: s.miss, seen: s.seen, due: s.due }));
+}
+
+/** Review queue from stored stats: words due for practice right now. */
+export function reviewQueue(
+  limit = 12,
+  now: string = new Date().toISOString(),
+): { word: string; miss: number; seen: number; due: string }[] {
+  return dueWords(loadWordStats(), now, limit);
 }
