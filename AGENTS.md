@@ -57,6 +57,7 @@ do not read or write the LEAD workspace from here.
 The Director runs both CLIs in this folder. This file is the shared context: Codex reads `AGENTS.md` natively (agents.md standard), Claude Code arrives via the `CLAUDE.md` pointer. Keep it the single source of truth — never fork per-runtime instructions.
 
 - **Commit is the handoff unit.** Finish → run the quality gates → commit with the `{YYYY-MM-DD} {summary}` format. Never leave work-in-progress uncommitted when yielding to the other agent; start every stint with `git status && git log --oneline -3`.
+- **Push `main` only.** Pushing side branches triggers Workers Builds' non-production `wrangler versions upload`, which re-enables the workers.dev + Preview URLs the Director keeps off (bitten 2026-07-11). Keep working branches local; `wrangler.jsonc` pins both flags false so every main deploy re-disables them.
 - **Split by area when parallel**: one agent in `worker/`+`extract/`+`migrations/` (Rust/data), the other in `web/` (UI). The seam is the API contract in `worker/src/lib.rs` — change it only with both sides in one commit.
 - **Dev servers**: `npx wrangler dev` defaults to port 8787 — a second instance needs `--port 8788`. Both share the same local D1 in `.wrangler/`; don't run two feeders concurrently.
 - **Codex note** (machine experience): weaker cwd grounding — give it absolute paths in prompts; model quota pools differ per model.
