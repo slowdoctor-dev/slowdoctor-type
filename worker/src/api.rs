@@ -80,30 +80,89 @@ pub async fn health(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))?)
 }
 
-/// GET /api/passages?track=<t> — one random passage from the track.
+/// GET /api/passages?tracks=<a,b>&fk_min=&fk_max= — one random passage.
+/// Multi-track requests distribute evenly across the selected tracks that
+/// have matches (never biased toward the biggest track); the optional
+/// Flesch-Kincaid range filters by difficulty (unscored rows never match).
+/// `track=` (single) is kept for back-compat.
 pub async fn passages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let url = req.url()?;
-    let track = url
-        .query_pairs()
-        .find(|(k, _)| k == "track")
-        .map(|(_, v)| v.to_string())
-        .unwrap_or_else(|| "news".to_string());
-    if !TRACKS.contains(&track.as_str()) {
+    let q = |name: &str| {
+        url.query_pairs()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.to_string())
+    };
+    let tracks_param = q("tracks").or_else(|| q("track")).unwrap_or_else(|| "news".to_string());
+    let selected: Vec<String> = tracks_param
+        .split(',')
+        .map(|t| t.trim().to_string())
+        .filter(|t| !t.is_empty())
+        .collect();
+    if selected.is_empty() || selected.iter().any(|t| !TRACKS.contains(&t.as_str())) {
         return Response::error("unknown track", 400);
     }
+    let fk_min = q("fk_min").and_then(|v| v.parse::<f64>().ok());
+    let fk_max = q("fk_max").and_then(|v| v.parse::<f64>().ok());
+    let range = if fk_min.is_some() || fk_max.is_some() {
+        Some((fk_min.unwrap_or(0.0), fk_max.unwrap_or(18.0)))
+    } else {
+        None
+    };
     let db = ctx.env.d1("DB")?;
+
+    // pick the track first, uniformly among selected tracks with matches
+    let mut candidates = Vec::new();
+    for t in &selected {
+        let n = match range {
+            Some((lo, hi)) => db
+                .prepare(
+                    "SELECT COUNT(*) AS n FROM passages p JOIN articles a ON a.id = p.article_id \
+                     WHERE a.track = ?1 AND p.fk_grade >= ?2 AND p.fk_grade <= ?3",
+                )
+                .bind(&[t.as_str().into(), lo.into(), hi.into()])?,
+            None => db
+                .prepare(
+                    "SELECT COUNT(*) AS n FROM passages p JOIN articles a ON a.id = p.article_id \
+                     WHERE a.track = ?1",
+                )
+                .bind(&[t.as_str().into()])?,
+        }
+        .first::<serde_json::Value>(None)
+        .await?
+        .and_then(|v| v.get("n").and_then(|x| x.as_i64()))
+        .unwrap_or(0);
+        if n > 0 {
+            candidates.push(t.clone());
+        }
+    }
+    let Some(track) = pick_random(&candidates) else {
+        return no_store(Response::from_json(&serde_json::json!({
+            "passage": null,
+            "hint": "no passages match the selected tracks/difficulty — widen the range or wait for the daily cron"
+        }))?);
+    };
+
     // two-step pick: shuffle over narrow ids only, then fetch one row
     // by PK — ORDER BY RANDOM() over full rows drags every passage's
     // text through the sorter and grows linearly with the feed.
-    let picked = db
-        .prepare(
-            "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
-             WHERE a.track = ?1 ORDER BY RANDOM() LIMIT 1",
-        )
-        .bind(&[track.as_str().into()])?
-        .first::<serde_json::Value>(None)
-        .await?
-        .and_then(|v| v.get("id").and_then(|n| n.as_i64()));
+    let picked = match range {
+        Some((lo, hi)) => db
+            .prepare(
+                "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
+                 WHERE a.track = ?1 AND p.fk_grade >= ?2 AND p.fk_grade <= ?3 \
+                 ORDER BY RANDOM() LIMIT 1",
+            )
+            .bind(&[track.as_str().into(), lo.into(), hi.into()])?,
+        None => db
+            .prepare(
+                "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
+                 WHERE a.track = ?1 ORDER BY RANDOM() LIMIT 1",
+            )
+            .bind(&[track.as_str().into()])?,
+    }
+    .first::<serde_json::Value>(None)
+    .await?
+    .and_then(|v| v.get("id").and_then(|n| n.as_i64()));
     let row = match picked {
         Some(pid) => {
             db.prepare(
@@ -196,6 +255,17 @@ pub async fn feed(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }
     let report = crate::feeder::run(&ctx.env).await?;
     Response::from_json(&report)
+}
+
+/// Uniform random element (entropy from getrandom, same as session tokens).
+fn pick_random(items: &[String]) -> Option<&String> {
+    if items.is_empty() {
+        return None;
+    }
+    let mut b = [0u8; 4];
+    getrandom::getrandom(&mut b).ok()?;
+    let n = u32::from_le_bytes(b) as usize;
+    items.get(n % items.len())
 }
 
 async fn count(db: &D1Database, table: &str) -> Result<i64> {

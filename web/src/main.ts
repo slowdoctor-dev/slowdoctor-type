@@ -3,7 +3,7 @@
 
 import "./style.css";
 import { $, cssVar } from "./dom";
-import { getPassage, postResult, type Passage } from "./api";
+import { getPassage, postResult, type FkRange, type Passage } from "./api";
 import { FALLBACK_PASSAGE } from "./fallback";
 import { TypingEngine, type TestResult } from "./engine";
 import { saveResult, summary } from "./history";
@@ -15,7 +15,8 @@ import { TRACKS, isTrack } from "./tracks";
 
 migrateStorage();
 
-const TRACK_KEY = "sdtype.track";
+const TRACKS_KEY = "sdtype.tracks";
+const FKRANGE_KEY = "sdtype.fkrange";
 const RECENT_KEY = "sdtype.recent";
 const RECENT_MAX = 15;
 
@@ -31,8 +32,18 @@ const histstripEl = $("#histstrip");
 let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
 let isPractice = false;
-let track: string = localStorage.getItem(TRACK_KEY) ?? "news";
-if (!isTrack(track)) track = "news";
+function loadJson<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+let selectedTracks: string[] = loadJson<string[]>(TRACKS_KEY, ["news"]).filter(isTrack);
+if (selectedTracks.length === 0) selectedTracks = ["news"];
+let fkRange: FkRange = loadJson<FkRange>(FKRANGE_KEY, { min: null, max: null });
 
 function recentIds(): number[] {
   try {
@@ -60,7 +71,7 @@ function renderHistStrip(): void {
 
 function renderTrackButtons(): void {
   document.querySelectorAll<HTMLButtonElement>("#tracks button").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.track === track);
+    btn.classList.toggle("active", selectedTracks.includes(btn.dataset.track ?? ""));
   });
 }
 
@@ -95,10 +106,10 @@ async function nextPassage(): Promise<void> {
   articleLinkEl.hidden = true;
 
   try {
-    let res = await getPassage(track);
+    let res = await getPassage(selectedTracks, fkRange);
     // avoid a recently seen passage (one re-roll is enough)
     if (res.passage?.id !== null && res.passage && recentIds().includes(res.passage.id as number)) {
-      const retry = await getPassage(track);
+      const retry = await getPassage(selectedTracks, fkRange);
       if (retry.passage) res = retry;
     }
     if (res.passage) {
@@ -143,7 +154,7 @@ function showResults(result: TestResult): void {
     accuracy: result.accuracy,
     consistency: result.consistency,
     durationMs: result.durationMs,
-    track: isPractice ? "practice" : track,
+    track: isPractice ? "practice" : (currentPassage?.track ?? "news"),
     passageId: currentPassage?.id ?? null,
   });
   renderHistStrip();
@@ -226,7 +237,8 @@ async function loadTrackCounts(): Promise<void> {
 
 // --- wiring ---
 
-// track pills render from the shared TRACKS list, not static markup
+// track pills render from the shared TRACKS list; click toggles membership
+// (multi-select), and the pool is served evenly across selected tracks
 const tracksNav = $("#tracks");
 for (const t of TRACKS) {
   const btn = document.createElement("button");
@@ -234,13 +246,30 @@ for (const t of TRACKS) {
   btn.dataset.track = t;
   btn.textContent = t;
   btn.addEventListener("click", () => {
-    track = t;
-    localStorage.setItem(TRACK_KEY, track);
+    if (selectedTracks.includes(t)) {
+      if (selectedTracks.length > 1) selectedTracks = selectedTracks.filter((x) => x !== t);
+    } else {
+      selectedTracks = [...selectedTracks, t];
+    }
+    localStorage.setItem(TRACKS_KEY, JSON.stringify(selectedTracks));
     renderTrackButtons();
     void nextPassage();
     btn.blur();
   });
   tracksNav.append(btn);
+}
+
+// difficulty range (Flesch-Kincaid grade): blank = no bound
+for (const [id, key] of [["#fk-min", "min"], ["#fk-max", "max"]] as const) {
+  const input = $<HTMLInputElement>(id);
+  const cur = fkRange[key];
+  input.value = cur === null ? "" : String(cur);
+  input.addEventListener("change", () => {
+    const n = input.value.trim() === "" ? null : Number(input.value);
+    fkRange = { ...fkRange, [key]: n !== null && Number.isFinite(n) ? n : null };
+    localStorage.setItem(FKRANGE_KEY, JSON.stringify(fkRange));
+    void nextPassage();
+  });
 }
 
 $("#next-btn").addEventListener("click", (e) => {

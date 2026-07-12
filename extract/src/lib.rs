@@ -11,6 +11,7 @@
 
 pub mod federal;
 pub mod pmc;
+pub mod readability;
 pub mod voa;
 
 pub use voa::{extract_paragraphs, text_article_id};

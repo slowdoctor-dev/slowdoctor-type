@@ -117,6 +117,36 @@ async fn housekeeping(db: &D1Database, report: &FeedReport) -> Result<()> {
     db.prepare("DELETE FROM sessions WHERE expires_at < datetime('now')")
         .run()
         .await?;
+    backfill_fk(db).await?;
+    Ok(())
+}
+
+/// Difficulty backfill: pre-0010 rows have fk_grade NULL — score a batch per
+/// run until none remain. Unscorable texts get -1 so they leave the queue
+/// (range filters never match them, same as NULL).
+async fn backfill_fk(db: &D1Database) -> Result<()> {
+    #[derive(serde::Deserialize)]
+    struct Row {
+        id: i64,
+        text: String,
+    }
+    let rows = db
+        .prepare("SELECT id, text FROM passages WHERE fk_grade IS NULL LIMIT 40")
+        .all()
+        .await?
+        .results::<Row>()?;
+    if rows.is_empty() {
+        return Ok(());
+    }
+    let mut stmts = Vec::with_capacity(rows.len());
+    for r in rows {
+        let fk = extract::readability::fk_grade(&r.text).unwrap_or(-1.0);
+        stmts.push(
+            db.prepare("UPDATE passages SET fk_grade = ?1 WHERE id = ?2")
+                .bind(&[fk.into(), (r.id as f64).into()])?,
+        );
+    }
+    db.batch(stmts).await?;
     Ok(())
 }
 
@@ -351,16 +381,21 @@ async fn store_article(db: &D1Database, meta: &ArticleMeta, passages: &[String])
         ])?,
     );
     for (seq, text) in passages.iter().enumerate() {
+        let (wc, fk) = extract::readability::passage_stats(text);
         stmts.push(
             db.prepare(
-                "INSERT OR IGNORE INTO passages (article_id, seq, text, word_count) \
-                 VALUES (?1, ?2, ?3, ?4)",
+                "INSERT OR IGNORE INTO passages (article_id, seq, text, word_count, fk_grade) \
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
             )
             .bind(&[
                 meta.id.as_str().into(),
                 (seq as f64).into(),
                 text.as_str().into(),
-                (extract::word_count(text) as f64).into(),
+                (wc as f64).into(),
+                match fk {
+                    Some(g) => g.into(),
+                    None => wasm_bindgen::JsValue::NULL,
+                },
             ])?,
         );
     }

@@ -70,6 +70,8 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 
 Shipped (chronological; P-numbers are historical labels):
 
+- **Passage difficulty (2026-07-12)**: ✅ FK grade at ingest (`extract::readability`, migration `0010`; cron housekeeping backfills NULL rows 40/run, unscorable = -1), `/api/passages?tracks=a,b&fk_min=&fk_max=` serves evenly across selected tracks (uniform pick among non-empty), track pills are multi-select, difficulty min/max inputs in the controls row (`sdtype.tracks`/`sdtype.fkrange`, storage v4).
+
 - **P0 (2026-07-10)**: ✅ VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
 - **P1 (2026-07-10)**: ✅ PMC OA CC BY feeder (`medical` track; contract in `extract/src/pmc.rs` header — E-utilities esearch json → efetch JATS; strict `/licenses/by/` match, by-nc/by-nd rejected); ✅ Gutenberg `classic` seed (`migrations/0002_classic_seed.sql`, 39 verbatim passages: Thoreau/Emerson/Russell/Franklin — regenerate with a fresh anchor-extract script rather than hand-editing texts); ✅ history dashboard (daily WPM/accuracy chart + recent table, localStorage only); ✅ per-track counts in `/api/health` → empty pills dimmed.
 - **P2a (2026-07-11)**: ✅ `daily` track (authored CC0 everyday-reply passages, `migrations/0004`); ✅ mistyped-word tracking (`web/src/words.ts`: per-word miss/seen in localStorage, corrected errors count) + problem-word chips + weak-word practice mode (word-soup from your misses; practice results stay out of the server aggregate); ✅ monkeytype-like minimal redesign + focus fade; ✅ `?embed=1` (hides header/footer — for the slowdoctor.dev iframe); ✅ zero-dep TS selftest (`npm test` = node --experimental-strip-types, scoring parity vectors + words logic); ✅ `no-store` on API responses, `articles(track)` index, broader PMC query.
@@ -80,7 +82,7 @@ Shipped (chronological; P-numbers are historical labels):
 Open (no fixed order):
 
 - **Scoring crate → wasm-bindgen module** (replacing the TS mirror; deferred since P2): was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
-- **Passage difficulty** (Director 2026-07-11): compute a readability score (Flesch-Kincaid grade) at ingest (`fk_grade` column on passages), then a practice-settings panel: **multi-select tracks + FK score range**, with the picker serving matching passages randomly but **evenly distributed** across the selected pool (not biased toward the biggest track).
+
 - **My passages** — login-gated per-user custom texts (solves USMLE/personal study content: no redistribution, no copyright exposure; LLM-generated outline-based drills stay self-reviewed).
 - **Code typing track** — C++/Java/Python/Go/Rust snippets (Director 2026-07-12); blocked on engine newline/tab/indent support.
 - **Rankings + cross-device history sync** — on top of sign-in (P5). Decide the result-trust policy first (server plausibility guard exists in /api/results; client stats remain client-computed).
