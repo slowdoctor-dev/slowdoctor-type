@@ -5,7 +5,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 echo "== rust tests (scoring, extract)"
-cargo test -p scoring -p extract
+cargo test -p scoring -p extract -p authcore
 
 echo "== worker compile check (wasm)"
 rustup target list --installed | grep -q wasm32-unknown-unknown \

@@ -11,10 +11,10 @@ import { computeMissedWords, recordTest } from "./words";
 import { initAccount, accountModalOpen } from "./account";
 import { initDashboard, dashboardOpen, closeDashboard } from "./dashboard";
 import { migrateStorage } from "./storage";
+import { TRACKS, isTrack } from "./tracks";
 
 migrateStorage();
 
-const TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
 const TRACK_KEY = "sdtype.track";
 const RECENT_KEY = "sdtype.recent";
 const RECENT_MAX = 15;
@@ -32,7 +32,7 @@ let engine: TypingEngine | null = null;
 let currentPassage: Passage | null = null;
 let isPractice = false;
 let track: string = localStorage.getItem(TRACK_KEY) ?? "news";
-if (!TRACKS.includes(track as (typeof TRACKS)[number])) track = "news";
+if (!isTrack(track)) track = "news";
 
 function recentIds(): number[] {
   try {
@@ -226,15 +226,22 @@ async function loadTrackCounts(): Promise<void> {
 
 // --- wiring ---
 
-document.querySelectorAll<HTMLButtonElement>("#tracks button").forEach((btn) => {
+// track pills render from the shared TRACKS list, not static markup
+const tracksNav = $("#tracks");
+for (const t of TRACKS) {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.dataset.track = t;
+  btn.textContent = t;
   btn.addEventListener("click", () => {
-    track = btn.dataset.track ?? "news";
+    track = t;
     localStorage.setItem(TRACK_KEY, track);
     renderTrackButtons();
     void nextPassage();
     btn.blur();
   });
-});
+  tracksNav.append(btn);
+}
 
 $("#next-btn").addEventListener("click", (e) => {
   void nextPassage();

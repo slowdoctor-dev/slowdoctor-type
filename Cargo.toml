@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["worker", "scoring", "extract"]
+members = ["worker", "scoring", "extract", "authcore"]
 
 # NOTE: no `strip = true` here — stripping removes the wasm custom sections
 # (target_features) that wasm-bindgen needs; worker-build runs wasm-opt anyway.

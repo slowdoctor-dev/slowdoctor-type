@@ -7,6 +7,7 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+authcore = { path = "../authcore" }
 extract = { path = "../extract" }
 worker = { version = "0.8", features = ["d1"] }
 serde = { version = "1", features = ["derive"] }

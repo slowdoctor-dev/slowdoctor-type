@@ -2,11 +2,15 @@
 // Pure functions are node-testable (scripts/selftest.ts); storage helpers
 // are browser-only and must only be called from the app.
 
+// .ts extension required: this module is loaded by the node selftest
+// (--experimental-strip-types resolves relative imports literally)
+import { TRACKS } from "./tracks.ts";
+
 export type Goals = Record<string, number>; // track -> tests per day (0/absent = no goal)
 
 const KEY = "sdtype.goals";
 
-export const GOAL_TRACKS = ["news", "daily", "aesthetic", "federal"] as const;
+export const GOAL_TRACKS = TRACKS;
 
 /** Tests per track completed on `day` (YYYY-MM-DD, UTC slice of the ISO stamp). */
 export function countsForDay(

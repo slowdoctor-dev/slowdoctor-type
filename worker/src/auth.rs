@@ -16,30 +16,14 @@ const SESSION_COOKIE: &str = "sdtype_session";
 const STATE_COOKIE: &str = "sdtype_oauth";
 const SESSION_DAYS: u32 = 30;
 
-/// Avatar = generated 8×8 mirrored pattern × background hue, stored as
-/// `<8 hex chars>|<hue 0-359>` (32 pattern bits; the client renders them as
-/// a symmetric identicon). Randomly assigned at signup; rerolled/customized
-/// in the account panel — no image uploads. Rendering lives in
-/// web/src/account.ts (`avatarSvg`). The 0006 migration's column default is
-/// a legacy placeholder; the server always writes an explicit value.
+/// Avatar format + validation live in `authcore` (pure, host-tested);
+/// rendering in web/src/avatar.ts. Randomly assigned at signup, rerolled in
+/// the account panel — no image uploads. The 0006 migration's column default
+/// is a legacy placeholder; the server always writes an explicit value.
 fn random_avatar() -> String {
     let mut buf = [0u8; 6];
     getrandom::getrandom(&mut buf).expect("entropy");
-    let hue = (u32::from(buf[4]) << 8 | u32::from(buf[5])) % 360;
-    format!(
-        "{:02x}{:02x}{:02x}{:02x}|{hue}",
-        buf[0], buf[1], buf[2], buf[3]
-    )
-}
-
-/// `<8 hex chars>|<hue 0-359>`.
-fn valid_avatar(avatar: &str) -> bool {
-    let Some((hex, hue)) = avatar.split_once('|') else {
-        return false;
-    };
-    let hex_ok = hex.len() == 8 && hex.bytes().all(|b| b.is_ascii_hexdigit());
-    let hue_ok = hue.parse::<u32>().map(|h| h < 360).unwrap_or(false);
-    hex_ok && hue_ok
+    authcore::avatar_from_entropy(buf)
 }
 
 struct Provider {
@@ -164,22 +148,20 @@ pub async fn callback(req: Request, ctx: RouteContext<()>) -> Result<Response> {
         .await?
         .and_then(|v| v.get("user_id").and_then(|n| n.as_i64()));
 
-    let user_id = match (existing, linking, current) {
-        // identity already bound elsewhere while linking → refuse, keep session
-        (Some(owner), true, Some(me)) if owner != me => {
+    // decision logic is pure + tested in the authcore crate
+    let user_id = match authcore::login_action(existing, linking, current) {
+        authcore::LoginAction::Conflict => {
             return finish(&req, "conflict", None);
         }
-        (Some(owner), _, _) => owner,
-        (None, true, Some(me)) => {
+        authcore::LoginAction::Expired => {
+            return finish(&req, "expired", None);
+        }
+        authcore::LoginAction::SignIn(id) => id,
+        authcore::LoginAction::Link(me) => {
             insert_identity(&db, p.key, &uid, me, &display).await?;
             me
         }
-        // "link" clicked but the session died mid-flow — creating a fresh
-        // account here would silently split the user's profile in two
-        (None, true, None) => {
-            return finish(&req, "expired", None);
-        }
-        (None, _, _) => {
+        authcore::LoginAction::CreateUser => {
             let nickname: String = display.chars().take(20).collect();
             db.prepare("INSERT INTO users (nickname, avatar) VALUES (?1, ?2)")
                 .bind(&[nickname.as_str().into(), random_avatar().as_str().into()])?
@@ -310,7 +292,7 @@ pub async fn update_me(mut req: Request, ctx: RouteContext<()>) -> Result<Respon
     }
     if let Some(avatar) = &u.avatar {
         let avatar = avatar.trim();
-        if !valid_avatar(avatar) {
+        if !authcore::valid_avatar(avatar) {
             return Response::error("avatar must be <emoji>|<hue 0-359>", 400);
         }
         db.prepare("UPDATE users SET avatar = ?1 WHERE id = ?2")
@@ -441,13 +423,7 @@ fn callback_uri(req: &Request, provider: &str) -> Result<String> {
 
 fn cookie(req: &Request, name: &str) -> Option<String> {
     let header = req.headers().get("cookie").ok().flatten()?;
-    for part in header.split(';') {
-        let (k, v) = part.trim().split_once('=')?;
-        if k == name {
-            return Some(v.to_string());
-        }
-    }
-    None
+    authcore::cookie_value(&header, name)
 }
 
 /// Browser-sent mutations must come from our own origin (CSRF guard on top
