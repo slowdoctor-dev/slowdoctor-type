@@ -27,10 +27,15 @@ export interface FkRange {
   max: number | null;
 }
 
-export async function getPassage(tracks: string[], range: FkRange): Promise<PassageResponse> {
+export async function getPassage(
+  tracks: string[],
+  range: FkRange,
+  langs?: string[],
+): Promise<PassageResponse> {
   const params = new URLSearchParams({ tracks: tracks.join(",") });
   if (range.min !== null) params.set("fk_min", String(range.min));
   if (range.max !== null) params.set("fk_max", String(range.max));
+  if (langs && langs.length > 0) params.set("langs", langs.join(","));
   const res = await fetch(`/api/passages?${params}`);
   if (!res.ok) throw new Error(`passages: HTTP ${res.status}`);
   return (await res.json()) as PassageResponse;

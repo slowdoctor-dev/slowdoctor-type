@@ -12,12 +12,14 @@ import { initAccount, accountModalOpen } from "./account";
 import { initDashboard, dashboardOpen, closeDashboard } from "./dashboard";
 import { migrateStorage } from "./storage";
 import { initSync, schedulePush } from "./sync";
-import { TRACKS, isTrack } from "./tracks";
+import { initSettings, settingsOpen } from "./settings";
+import { TRACKS, CODE_LANGS, isTrack, isCodeLang } from "./tracks";
 
 migrateStorage();
 
 const TRACKS_KEY = "sdtype.tracks";
 const FKRANGE_KEY = "sdtype.fkrange";
+const LANGS_KEY = "sdtype.langs";
 const RECENT_KEY = "sdtype.recent";
 const RECENT_MAX = 15;
 
@@ -45,6 +47,21 @@ function loadJson<T>(key: string, fallback: T): T {
 let selectedTracks: string[] = loadJson<string[]>(TRACKS_KEY, ["news"]).filter(isTrack);
 if (selectedTracks.length === 0) selectedTracks = ["news"];
 let fkRange: FkRange = loadJson<FkRange>(FKRANGE_KEY, { min: null, max: null });
+let selectedLangs: string[] = loadJson<string[]>(LANGS_KEY, [...CODE_LANGS]).filter(isCodeLang);
+if (selectedLangs.length === 0) selectedLangs = [...CODE_LANGS];
+
+function savePrefs(): void {
+  localStorage.setItem(TRACKS_KEY, JSON.stringify(selectedTracks));
+  localStorage.setItem(FKRANGE_KEY, JSON.stringify(fkRange));
+  localStorage.setItem(LANGS_KEY, JSON.stringify(selectedLangs));
+}
+
+/** langs param only when it actually narrows a selected code pool */
+function langsParam(): string[] | undefined {
+  return selectedTracks.includes("code") && selectedLangs.length < CODE_LANGS.length
+    ? selectedLangs
+    : undefined;
+}
 
 function recentIds(): number[] {
   try {
@@ -71,9 +88,18 @@ function renderHistStrip(): void {
 }
 
 function renderTrackButtons(): void {
+  // nav pills mark plain single-track mode only; anything combined or
+  // filtered shows on the custom button instead
+  const single = selectedTracks.length === 1;
   document.querySelectorAll<HTMLButtonElement>("#tracks button").forEach((btn) => {
-    btn.classList.toggle("active", selectedTracks.includes(btn.dataset.track ?? ""));
+    btn.classList.toggle("active", single && selectedTracks[0] === btn.dataset.track);
   });
+  const customized =
+    !single ||
+    fkRange.min !== null ||
+    fkRange.max !== null ||
+    selectedLangs.length < CODE_LANGS.length;
+  $("#custom-btn").classList.toggle("on", customized);
 }
 
 function startTest(passage: Passage, practice = false): void {
@@ -107,10 +133,10 @@ async function nextPassage(): Promise<void> {
   articleLinkEl.hidden = true;
 
   try {
-    let res = await getPassage(selectedTracks, fkRange);
+    let res = await getPassage(selectedTracks, fkRange, langsParam());
     // avoid a recently seen passage (one re-roll is enough)
     if (res.passage?.id !== null && res.passage && recentIds().includes(res.passage.id as number)) {
-      const retry = await getPassage(selectedTracks, fkRange);
+      const retry = await getPassage(selectedTracks, fkRange, langsParam());
       if (retry.passage) res = retry;
     }
     if (res.passage) {
@@ -239,8 +265,9 @@ async function loadTrackCounts(): Promise<void> {
 
 // --- wiring ---
 
-// track pills render from the shared TRACKS list; click toggles membership
-// (multi-select), and the pool is served evenly across selected tracks
+// track pills render from the shared TRACKS list. A pill is plain mode:
+// click = only that track, all filters cleared. Mixing tracks, difficulty
+// and code languages live in the custom panel (web/src/settings.ts).
 const tracksNav = $("#tracks");
 for (const t of TRACKS) {
   const btn = document.createElement("button");
@@ -248,12 +275,10 @@ for (const t of TRACKS) {
   btn.dataset.track = t;
   btn.textContent = t;
   btn.addEventListener("click", () => {
-    if (selectedTracks.includes(t)) {
-      if (selectedTracks.length > 1) selectedTracks = selectedTracks.filter((x) => x !== t);
-    } else {
-      selectedTracks = [...selectedTracks, t];
-    }
-    localStorage.setItem(TRACKS_KEY, JSON.stringify(selectedTracks));
+    selectedTracks = [t];
+    fkRange = { min: null, max: null };
+    selectedLangs = [...CODE_LANGS];
+    savePrefs();
     renderTrackButtons();
     void nextPassage();
     btn.blur();
@@ -261,18 +286,31 @@ for (const t of TRACKS) {
   tracksNav.append(btn);
 }
 
-// difficulty range (Flesch-Kincaid grade): blank = no bound
-for (const [id, key] of [["#fk-min", "min"], ["#fk-max", "max"]] as const) {
-  const input = $<HTMLInputElement>(id);
-  const cur = fkRange[key];
-  input.value = cur === null ? "" : String(cur);
-  input.addEventListener("change", () => {
-    const n = input.value.trim() === "" ? null : Number(input.value);
-    fkRange = { ...fkRange, [key]: n !== null && Number.isFinite(n) ? n : null };
-    localStorage.setItem(FKRANGE_KEY, JSON.stringify(fkRange));
-    void nextPassage();
-  });
-}
+initSettings({
+  get: () => ({ tracks: selectedTracks, fk: fkRange, langs: selectedLangs }),
+  set: (p) => {
+    selectedTracks = p.tracks;
+    fkRange = p.fk;
+    selectedLangs = p.langs;
+    savePrefs();
+    renderTrackButtons();
+  },
+  onClose: () => void nextPassage(),
+});
+
+// help overlay (static content in index.html)
+const helpEl = $("#help");
+const helpOpen = (): boolean => !helpEl.hidden;
+$("#help-btn").addEventListener("click", (e) => {
+  helpEl.hidden = false;
+  (e.currentTarget as HTMLButtonElement).blur();
+});
+$("#h-close").addEventListener("click", () => {
+  helpEl.hidden = true;
+});
+helpEl.addEventListener("click", (e) => {
+  if (e.target === helpEl) helpEl.hidden = true;
+});
 
 $("#next-btn").addEventListener("click", (e) => {
   void nextPassage();
@@ -313,8 +351,16 @@ kbdEl.addEventListener("beforeinput", (e) => {
 document.addEventListener("keydown", (e) => {
   if (e.isComposing) return;
 
-  // account panel owns its keys (text inputs + its own esc handler)
-  if (accountModalOpen()) return;
+  // account/settings panels own their keys (inputs + their own esc handlers)
+  if (accountModalOpen() || settingsOpen()) return;
+
+  if (helpOpen()) {
+    if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") {
+      e.preventDefault();
+      helpEl.hidden = true;
+    }
+    return;
+  }
 
   if (dashboardOpen()) {
     if (e.key === "Escape" || e.key === "Enter" || e.key === "Tab") {

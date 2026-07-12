@@ -84,6 +84,30 @@ await page.keyboard.press("Escape");
 await page.waitForSelector("#account[hidden]", { state: "attached" });
 check("account: esc closes", true);
 
+// --- single-select track pills ---
+await page.click('#tracks button[data-track="daily"]');
+await page.waitForSelector("#words .c");
+const active = await page.$$eval("#tracks button.active", (b) => b.map((x) => x.dataset.track));
+check("tracks: pill click is single-select", active.length === 1 && active[0] === "daily");
+
+// --- custom practice panel ---
+await page.click("#custom-btn");
+await page.waitForSelector("#settings:not([hidden])");
+const opts = await page.$$eval("#settings-card .opt", (b) => b.map((x) => x.textContent));
+check("custom: 6 source + 5 language toggles", opts.length === 11 && opts.includes("Python"));
+check("custom: difficulty inputs", (await page.$$eval(".fk-row input", (i) => i.length)) === 2);
+await page.keyboard.press("Escape");
+await page.waitForSelector("#settings[hidden]", { state: "attached" });
+check("custom: esc closes", true);
+
+// --- help ---
+await page.click("#help-btn");
+await page.waitForSelector("#help:not([hidden])");
+check("help: sections rendered", (await page.$$eval("#help .dash-sub", (s) => s.length)) >= 5);
+await page.keyboard.press("Escape");
+await page.waitForSelector("#help[hidden]", { state: "attached" });
+check("help: esc closes", true);
+
 await browser.close();
 if (failures.length > 0) {
   console.error(`\n${failures.length} smoke failure(s)`);

@@ -8,6 +8,10 @@ use crate::no_store;
 /// Must list the same keys as web/src/tracks.ts (see AGENTS.md conventions).
 const TRACKS: &[&str] = &["news", "daily", "pmc", "federal", "vocab", "code"];
 
+/// Must list the same keys as CODE_LANGS in web/src/tracks.ts. Each language
+/// is one seeded article with id `code-<lang>` (scripts/gen_code_seed.py).
+const CODE_LANGS: &[&str] = &["cpp", "java", "python", "go", "rust"];
+
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Passage {
     id: i64,
@@ -80,11 +84,12 @@ pub async fn health(_req: Request, ctx: RouteContext<()>) -> Result<Response> {
     }))?)
 }
 
-/// GET /api/passages?tracks=<a,b>&fk_min=&fk_max= — one random passage.
-/// Multi-track requests distribute evenly across the selected tracks that
-/// have matches (never biased toward the biggest track); the optional
-/// Flesch-Kincaid range filters by difficulty (unscored rows never match).
-/// `track=` (single) is kept for back-compat.
+/// GET /api/passages?tracks=<a,b>&fk_min=&fk_max=&langs=<x,y> — one random
+/// passage. Multi-track requests distribute evenly across the selected tracks
+/// that have matches (never biased toward the biggest track); the optional
+/// Flesch-Kincaid range filters by difficulty (unscored rows never match);
+/// `langs` restricts code passages to the given languages (other tracks are
+/// unaffected). `track=` (single) is kept for back-compat.
 pub async fn passages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let url = req.url()?;
     let q = |name: &str| {
@@ -108,42 +113,54 @@ pub async fn passages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     } else {
         None
     };
+    let langs: Option<Vec<String>> = q("langs").map(|v| {
+        v.split(',')
+            .map(|l| l.trim().to_string())
+            .filter(|l| !l.is_empty())
+            .collect()
+    });
+    if let Some(ls) = &langs {
+        if ls.is_empty() || ls.iter().any(|l| !CODE_LANGS.contains(&l.as_str())) {
+            return Response::error("unknown code language", 400);
+        }
+    }
     let db = ctx.env.d1("DB")?;
+
+    // filter tail shared by the count and pick queries (appended after each
+    // query's own track condition, so placeholders stay positional)
+    let mut cond = String::new();
+    let mut cond_binds: Vec<wasm_bindgen::JsValue> = Vec::new();
+    if let Some((lo, hi)) = range {
+        cond.push_str(" AND p.fk_grade >= ? AND p.fk_grade <= ?");
+        cond_binds.push(lo.into());
+        cond_binds.push(hi.into());
+    }
+    if let Some(ls) = &langs {
+        let ph = vec!["?"; ls.len()].join(",");
+        cond.push_str(&format!(" AND (a.track != 'code' OR a.id IN ({ph}))"));
+        for l in ls {
+            cond_binds.push(format!("code-{l}").into());
+        }
+    }
 
     // pick the track first, uniformly among selected tracks with matches —
     // one GROUP BY query covers all selected tracks
-    let placeholders = (1..=selected.len())
-        .map(|i| format!("?{i}"))
-        .collect::<Vec<_>>()
-        .join(",");
-    let mut binds: Vec<wasm_bindgen::JsValue> =
+    let track_ph = vec!["?"; selected.len()].join(",");
+    let mut count_binds: Vec<wasm_bindgen::JsValue> =
         selected.iter().map(|t| t.as_str().into()).collect();
-    let sql = match range {
-        Some((lo, hi)) => {
-            binds.push(lo.into());
-            binds.push(hi.into());
-            format!(
-                "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
-                 JOIN articles a ON a.id = p.article_id WHERE a.track IN ({placeholders}) \
-                 AND p.fk_grade >= ?{} AND p.fk_grade <= ?{} GROUP BY a.track",
-                selected.len() + 1,
-                selected.len() + 2
-            )
-        }
-        None => format!(
-            "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
-             JOIN articles a ON a.id = p.article_id WHERE a.track IN ({placeholders}) \
-             GROUP BY a.track"
-        ),
-    };
+    count_binds.extend(cond_binds.iter().cloned());
     #[derive(serde::Deserialize)]
     struct TrackCount {
         track: String,
         n: i64,
     }
     let candidates: Vec<String> = db
-        .prepare(&sql)
-        .bind(&binds)?
+        .prepare(&format!(
+            "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
+             JOIN articles a ON a.id = p.article_id WHERE a.track IN ({track_ph}){cond} \
+             GROUP BY a.track"
+        ))
+        .bind(&count_binds)?
         .all()
         .await?
         .results::<TrackCount>()?
@@ -154,31 +171,24 @@ pub async fn passages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     let Some(track) = pick_random(&candidates) else {
         return no_store(Response::from_json(&serde_json::json!({
             "passage": null,
-            "hint": "no passages match the selected tracks/difficulty — widen the range or wait for the daily cron"
+            "hint": "no passages match the selected tracks/difficulty/languages — widen the filters or wait for the daily cron"
         }))?);
     };
 
     // two-step pick: shuffle over narrow ids only, then fetch one row
     // by PK — ORDER BY RANDOM() over full rows drags every passage's
     // text through the sorter and grows linearly with the feed.
-    let picked = match range {
-        Some((lo, hi)) => db
-            .prepare(
-                "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
-                 WHERE a.track = ?1 AND p.fk_grade >= ?2 AND p.fk_grade <= ?3 \
-                 ORDER BY RANDOM() LIMIT 1",
-            )
-            .bind(&[track.as_str().into(), lo.into(), hi.into()])?,
-        None => db
-            .prepare(
-                "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
-                 WHERE a.track = ?1 ORDER BY RANDOM() LIMIT 1",
-            )
-            .bind(&[track.as_str().into()])?,
-    }
-    .first::<serde_json::Value>(None)
-    .await?
-    .and_then(|v| v.get("id").and_then(|n| n.as_i64()));
+    let mut pick_binds: Vec<wasm_bindgen::JsValue> = vec![track.as_str().into()];
+    pick_binds.extend(cond_binds.iter().cloned());
+    let picked = db
+        .prepare(&format!(
+            "SELECT p.id AS id FROM passages p JOIN articles a ON a.id = p.article_id \
+             WHERE a.track = ?{cond} ORDER BY RANDOM() LIMIT 1"
+        ))
+        .bind(&pick_binds)?
+        .first::<serde_json::Value>(None)
+        .await?
+        .and_then(|v| v.get("id").and_then(|n| n.as_i64()));
     let row = match picked {
         Some(pid) => {
             db.prepare(

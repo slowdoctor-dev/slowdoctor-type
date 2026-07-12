@@ -38,10 +38,8 @@
           <button id="next-btn" type="button">next passage <kbd>tab</kbd></button>
           <button id="restart-btn" type="button">restart <kbd>esc</kbd></button>
           <button id="stats-btn" type="button">stats</button>
-          <span id="difficulty" title="Flesch-Kincaid grade range; blank = any">
-            difficulty <input id="fk-min" type="number" min="0" max="18" step="0.5" placeholder="–" />
-            to <input id="fk-max" type="number" min="0" max="18" step="0.5" placeholder="–" />
-          </span>
+          <button id="custom-btn" type="button" title="mix sources, difficulty range, code languages">custom</button>
+          <button id="help-btn" type="button">help</button>
         </div>
         <div id="histstrip"></div>
       </main>
@@ -90,6 +88,56 @@
 
       <div id="account" hidden>
         <div class="results-card" id="account-card"></div>
+      </div>
+
+      <!-- custom practice: rendered by web/src/settings.ts -->
+      <div id="settings" hidden>
+        <div class="results-card" id="settings-card"></div>
+      </div>
+
+      <div id="help" hidden>
+        <div class="results-card help-card">
+          <div class="dash-head">
+            <span class="dash-title">help</span>
+            <button id="h-close" type="button">close <kbd>esc</kbd></button>
+          </div>
+          <div class="dash-sub">typing</div>
+          <p class="help-p">
+            Type the passage shown — the timer starts on your first keystroke.
+            Backspace fixes mistakes (corrected characters still count against accuracy).
+            In code passages, press enter where the ↵ marker appears.
+            On a phone, tap the text to bring up the keyboard.
+          </p>
+          <div class="dash-sub">shortcuts</div>
+          <p class="help-p">
+            <kbd>tab</kbd> next passage · <kbd>esc</kbd> restart the current one ·
+            on the results screen, <kbd>enter</kbd> continues.
+          </p>
+          <div class="dash-sub">sources</div>
+          <p class="help-p">
+            <b>news</b> — VOA Learning English stories ·
+            <b>daily</b> — everyday conversational replies ·
+            <b>pmc</b> — open-access medical abstracts ·
+            <b>federal</b> — NASA &amp; ShareAmerica articles ·
+            <b>vocab</b> — GRE-level words with definitions ·
+            <b>code</b> — short programs in C++, Java, Python, Go and Rust.
+          </p>
+          <div class="dash-sub">custom</div>
+          <p class="help-p">
+            The source buttons up top are one-at-a-time: click one and only its
+            passages appear. To mix several sources, limit code to certain
+            languages, or set a difficulty range (Flesch-Kincaid grade — roughly
+            US school years), open <b>custom</b>. Clicking any source button
+            switches back to that single source with no filters.
+          </p>
+          <div class="dash-sub">stats &amp; account</div>
+          <p class="help-p">
+            <b>stats</b> shows your history, daily goals and problem words —
+            words you mistype come back for review on a spaced schedule, and
+            <b>practice weak words</b> drills them. Everything is stored in this
+            browser; signing in adds cross-device history sync and the rankings.
+          </p>
+        </div>
       </div>
 
       <footer>

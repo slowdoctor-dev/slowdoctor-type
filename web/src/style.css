@@ -291,24 +291,69 @@ kbd {
   margin-left: 0.35em;
 }
 
-#difficulty {
-  color: var(--dim);
-  font-size: 0.8rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
+/* the custom pool is in effect (mixed tracks / difficulty / languages) */
+#custom-btn.on {
+  color: var(--accent);
 }
 
-#difficulty input {
-  width: 3rem;
+/* ---------- custom practice panel ---------- */
+
+.opt-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.opt {
+  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--dim);
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.3rem 0.7rem;
+}
+
+.opt:hover {
+  color: var(--fg);
+}
+
+.opt.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.fk-row input {
+  width: 3.4rem;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 5px;
   color: var(--fg);
   font: inherit;
-  font-size: 0.78rem;
-  padding: 0.1rem 0.3rem;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.3rem;
   text-align: center;
+}
+
+/* ---------- help ---------- */
+
+.help-card {
+  max-height: 85vh;
+  overflow-y: auto;
+  gap: 0.55rem;
+}
+
+.help-p {
+  color: var(--fg);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.help-p b {
+  color: var(--accent);
+  font-weight: 500;
 }
 
 #histstrip {
@@ -321,7 +366,9 @@ kbd {
 
 #results,
 #dashboard,
-#account {
+#account,
+#settings,
+#help {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.85);
@@ -333,7 +380,9 @@ kbd {
 
 #results[hidden],
 #dashboard[hidden],
-#account[hidden] {
+#account[hidden],
+#settings[hidden],
+#help[hidden] {
   display: none;
 }
 
@@ -415,7 +464,9 @@ kbd {
 }
 
 #d-close,
-#a-close {
+#a-close,
+#s-close,
+#h-close {
   background: none;
   border: none;
   color: var(--dim);
@@ -425,7 +476,9 @@ kbd {
 }
 
 #d-close:hover,
-#a-close:hover {
+#a-close:hover,
+#s-close:hover,
+#h-close:hover {
   color: var(--fg);
 }
 

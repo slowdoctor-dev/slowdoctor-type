@@ -100,6 +100,18 @@ await page.waitForSelector("#words .c");
 await page.click("#account-btn");
 await page.waitForSelector("#account:not([hidden])");
 await page.screenshot({ path: `${OUT}/4-account.png` });
+await page.keyboard.press("Escape");
+
+// 5) custom practice panel
+await page.click("#custom-btn");
+await page.waitForSelector("#settings:not([hidden])");
+await page.screenshot({ path: `${OUT}/5-custom.png` });
+await page.keyboard.press("Escape");
+
+// 6) help
+await page.click("#help-btn");
+await page.waitForSelector("#help:not([hidden])");
+await page.screenshot({ path: `${OUT}/6-help.png` });
 
 await browser.close();
 console.log(`screenshots written to ${OUT}/`);

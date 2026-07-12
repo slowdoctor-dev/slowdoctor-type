@@ -19,6 +19,7 @@ import {
 import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
 import { mergeHistories, type HistoryEntry } from "../src/history.ts";
 import { parseAvatar, avatarSvg } from "../src/avatar.ts";
+import { CODE_LANGS, isCodeLang, toggleKeepOne } from "../src/tracks.ts";
 
 let failures = 0;
 let passes = 0;
@@ -162,6 +163,14 @@ eq("merge: duplicate timestamps collapse",
   mergeHistories([he("2026-07-01T00:00:00Z", 50)], [he("2026-07-01T00:00:00Z", 55)]).length,
   1);
 eq("merge: both empty", mergeHistories([], []), []);
+
+section("track & language selection");
+eq("toggle: adds a missing item", toggleKeepOne(["news"], "code"), ["news", "code"]);
+eq("toggle: removes a present item", toggleKeepOne(["news", "code"], "code"), ["news"]);
+eq("toggle: never empties the selection", toggleKeepOne(["news"], "news"), ["news"]);
+eq("langs: five languages offered", CODE_LANGS.length, 5);
+eq("langs: cpp is valid", isCodeLang("cpp"), true);
+eq("langs: js is not offered", isCodeLang("js"), false);
 
 section("avatar (8x8 pattern x hue)");
 eq("avatar: parse", parseAvatar("a1b2c3d4|210"), { bits: 0xa1b2c3d4, hue: 210 });
