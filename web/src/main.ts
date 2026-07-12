@@ -298,6 +298,8 @@ kbdEl.addEventListener("beforeinput", (e) => {
   if (!engine) return;
   if (ev.inputType === "deleteContentBackward") {
     engine.backspace();
+  } else if (ev.inputType === "insertLineBreak" || ev.inputType === "insertParagraph") {
+    engine.inputChar("\n");
   } else if (
     (ev.inputType === "insertText" || ev.inputType === "insertCompositionText") &&
     ev.data

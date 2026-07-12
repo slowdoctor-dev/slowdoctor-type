@@ -185,6 +185,7 @@ main {
   user-select: none;
   cursor: default;
   word-break: break-word;
+  white-space: pre-wrap; /* code passages carry real newlines */
 }
 
 #words.loading {
@@ -197,6 +198,13 @@ main {
 
 #words span.c.wrong {
   color: var(--error);
+}
+
+#words span.c.newline::before {
+  content: "\21B5"; /* return marker before the actual break */
+  color: var(--dim);
+  opacity: 0.5;
+  font-size: 0.8em;
 }
 
 #caret {

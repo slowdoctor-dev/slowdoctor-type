@@ -35,6 +35,7 @@ and every passage renders its attribution + link to the full article.
 | `pmc` | PMC Open Access, strictly CC BY-filtered medical-research abstracts — daily feed | CC BY (attribution rendered per passage) |
 | `federal` | U.S. federal features: NASA + ShareAmerica full-content feeds — daily feed | Public domain (U.S. government works) |
 | `vocab` | GRE-level words with plain-English definitions — authored for this project, static seed | Original content (CC0) |
+| `code` | Idiomatic C++/Java/Python/Go/Rust snippets — authored for this project, static seed | Original content (CC0) |
 
 ## Develop
 

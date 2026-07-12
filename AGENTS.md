@@ -70,6 +70,7 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 
 Shipped (chronological; P-numbers are historical labels):
 
+- **Code track (2026-07-12)**: ✅ engine types real newlines (Enter / mobile insertLineBreak; `↵` marker + pre-wrap), 30 authored CC0 snippets across C++/Java/Python/Go/Rust (seed `0011` via `gen_code_seed.py`, 2-space indents, `fk_grade=-1` so difficulty filters skip code).
 - **Passage difficulty (2026-07-12)**: ✅ FK grade at ingest (`extract::readability`, migration `0010`; cron housekeeping backfills NULL rows 40/run, unscorable = -1), `/api/passages?tracks=a,b&fk_min=&fk_max=` serves evenly across selected tracks (uniform pick among non-empty), track pills are multi-select, difficulty min/max inputs in the controls row (`sdtype.tracks`/`sdtype.fkrange`, storage v4).
 
 - **P0 (2026-07-10)**: ✅ VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
@@ -84,7 +85,6 @@ Open (no fixed order):
 - **Scoring crate → wasm-bindgen module** (replacing the TS mirror; deferred since P2): was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
 
 - **My passages** — login-gated per-user custom texts (solves USMLE/personal study content: no redistribution, no copyright exposure; LLM-generated outline-based drills stay self-reviewed).
-- **Code typing track** — C++/Java/Python/Go/Rust snippets (Director 2026-07-12); blocked on engine newline/tab/indent support.
 - **Rankings + cross-device history sync** — on top of sign-in (P5). Decide the result-trust policy first (server plausibility guard exists in /api/results; client stats remain client-computed).
 
 ## Deploy state

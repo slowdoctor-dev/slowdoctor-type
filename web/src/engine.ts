@@ -60,7 +60,8 @@ export class TypingEngine {
     const frag = document.createDocumentFragment();
     for (const c of this.chars) {
       const span = document.createElement("span");
-      span.className = "c";
+      // newlines (code passages) render a return marker + an actual break
+      span.className = c === "\n" ? "c newline" : "c";
       span.textContent = c;
       frag.appendChild(span);
       this.spans.push(span);
@@ -84,6 +85,7 @@ export class TypingEngine {
   handleKey(e: KeyboardEvent): boolean {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     if (e.key === "Backspace") return this.backspace();
+    if (e.key === "Enter") return this.inputChar("\n");
     if (e.key.length !== 1) return false;
     return this.inputChar(e.key);
   }
