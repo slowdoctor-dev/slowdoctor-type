@@ -21,7 +21,7 @@ do not read or write the LEAD workspace from here.
 ## Architecture
 
 - `worker/` — workers-rs crate. `#[event(fetch)]` router: `GET /api/passages`, `POST /api/results`, `GET /api/health`, `POST /api/feed` (Bearer `FEED_TOKEN` guard). `#[event(scheduled)]` daily feeder (cron `0 21 * * *` UTC = 06:00 KST).
-- `extract/` — source parsing (VOA in `lib.rs`, PMC JATS in `pmc.rs`, federal WordPress feeds in `federal.rs`) as its own dependency-free crate (no scraper/feed-rs; keeps wasm small, and host-runnable tests don't pull the wasm-only `worker` dep). Unit-tested against fixture snippets.
+- `extract/` — source parsing (shared text machinery in `lib.rs`; per-source contracts in `voa.rs`, `pmc.rs`, `federal.rs`) as its own dependency-free crate (no scraper/feed-rs; keeps wasm small, and host-runnable tests don't pull the wasm-only `worker` dep). Unit-tested against fixture snippets.
 - `authcore/` — pure sign-in/profile logic (login decision state machine, cookie parsing, avatar format) + tests. Exists for the same reason as `extract`: the worker crate is wasm-only, so security-critical decisions live here where `cargo test` can reach them; `worker/src/auth.rs` owns the I/O and delegates.
 - `scoring/` — canonical scoring formulas + tests. **Parity rule**: `web/src/scoring.ts` mirrors these formulas exactly; change both together or not at all. (Planned P2: compile this crate to wasm-bindgen and delete the TS mirror.)
 - `web/` — Vite + vanilla TS, zero runtime dependencies. Built `web/dist` is served via Workers static assets; unmatched routes (`/api/*`) fall through to the Worker.
@@ -48,9 +48,9 @@ do not read or write the LEAD workspace from here.
 
 - Commit messages: `{YYYY-MM-DD} {English summary}` (no Conventional Commits, no Co-Authored-By).
 - Keep the frontend dependency-free at runtime; dev-deps are Vite + TypeScript only.
-- **`./scripts/check.sh` must pass before any commit** — it is the entire quality gate: `cargo test -p scoring -p extract`, worker wasm compile check, `cd web && npm test`, `npm run build`. There is deliberately **no CI** (Director 2026-07-11: GitHub Actions retired same day it was added); the gate script is the only enforcement, so never skip it.
+- **`./scripts/check.sh` must pass before any commit** — it is the entire quality gate: `cargo test -p scoring -p extract -p authcore`, worker wasm compile check, `cd web && npm test`, `npm run build`. There is deliberately **no CI** (Director 2026-07-11: GitHub Actions retired same day it was added); the gate script is the only enforcement, so never skip it.
 - **Run-verification screenshots** (Director standing request, 2026-07-11): after substantive changes, run the app and capture screenshots of the main screens — typing view, results, dashboard — and show them to the Director as proof it runs. Tooling lives in the repo: `web/e2e/shots.mjs` (seeded screenshots) and `scripts/e2e.sh` → `web/e2e/smoke.mjs` (browser smoke: typing incl. virtual keyboard, results, practice launch, account modal). Both need Playwright + Chromium (env knobs in the file headers); they are optional extras on top of the mandatory `scripts/check.sh`.
-- **Adding a track touches exactly two lists**: `web/src/tracks.ts` (buttons/goals render from it) and `TRACKS` in `worker/src/lib.rs` — plus a feeder or seed for content.
+- **Adding a track touches exactly two lists**: `web/src/tracks.ts` (buttons/goals render from it) and `TRACKS` in `worker/src/api.rs` — plus a feeder or seed for content.
 - Mostly historical: only if working from a DrvFs checkout (`/mnt/c/...`), set `CARGO_TARGET_DIR` onto ext4 via an untracked `.cargo/config.toml` — irrelevant at the canonical `~/repo` location.
 - `cargo install worker-build` needs OpenSSL headers; on the original WSL box (no sudo, no libssl-dev) they live in a user-space extract: `export OPENSSL_INCLUDE_DIR=~/.local/openssl-dev/usr/include OPENSSL_LIB_DIR=~/.local/openssl-dev/usr/lib/x86_64-linux-gnu OPENSSL_STATIC=1` (created 2026-07-10 via `apt-get download libssl-dev` + `dpkg -x`). Normal machines: just install `pkg-config libssl-dev`.
 
@@ -68,15 +68,20 @@ The Director runs both CLIs in this folder. This file is the shared context: Cod
 
 ## Roadmap
 
+Shipped (chronological; P-numbers are historical labels):
+
 - **P0 (2026-07-10)**: ✅ VOA news track end-to-end; typing engine; localStorage stats; anonymous aggregate results.
 - **P1 (2026-07-10)**: ✅ PMC OA CC BY feeder (`medical` track; contract in `extract/src/pmc.rs` header — E-utilities esearch json → efetch JATS; strict `/licenses/by/` match, by-nc/by-nd rejected); ✅ Gutenberg `classic` seed (`migrations/0002_classic_seed.sql`, 39 verbatim passages: Thoreau/Emerson/Russell/Franklin — regenerate with a fresh anchor-extract script rather than hand-editing texts); ✅ history dashboard (daily WPM/accuracy chart + recent table, localStorage only); ✅ per-track counts in `/api/health` → empty pills dimmed.
 - **P2a (2026-07-11)**: ✅ `daily` track (authored CC0 everyday-reply passages, `migrations/0004`); ✅ mistyped-word tracking (`web/src/words.ts`: per-word miss/seen in localStorage, corrected errors count) + problem-word chips + weak-word practice mode (word-soup from your misses; practice results stay out of the server aggregate); ✅ monkeytype-like minimal redesign + focus fade; ✅ `?embed=1` (hides header/footer — for the slowdoctor.dev iframe); ✅ zero-dep TS selftest (`npm test` = node --experimental-strip-types, scoring parity vectors + words logic); ✅ `no-store` on API responses, `articles(track)` index, broader PMC query.
 - **P2b (2026-07-11)**: ✅ ~~GitHub Actions CI~~ (added, then retired the same day by Director decision — quality gates run locally via `scripts/check.sh` instead, wasm compile check included); ✅ spaced-repetition scheduling for weak words (SM-2-lite in `web/src/words.ts`: a miss makes the word due immediately, each correct encounter of a missed word schedules the next review 1/3/7/14/30 days out; the practice pool takes due words first and tops up with worst misses; dashboard chips highlight due words; pre-SRS localStorage entries count as due); ✅ per-track daily goals (`web/src/goals.ts` + dashboard editor, `sdtype.goals` in localStorage, today's per-track progress with met-goal accent).
-- **P2c (open)**: scoring crate → wasm-bindgen module replacing the TS mirror — was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
 - **P3 (2026-07-11)**: ✅ track rework (Director): `classic` retired, `medical` → `aesthetic`, `federal` added — NASA + ShareAmerica WordPress full-content feeds, migration `0005`, localStorage track value migrated in `main.ts`. Federal contract pending live verification (see its section).
-- **P4 (open, Director 2026-07-11)**: passage difficulty — compute a readability score (Flesch-Kincaid grade) at ingest (`fk_grade` column on passages), then a practice-settings panel: **multi-select tracks + FK score range**, with the picker serving matching passages randomly but **evenly distributed** across the selected pool (not biased toward the biggest track).
 - **P5 (2026-07-11)**: ✅ social sign-in — Google/Kakao/GitHub OAuth code flow in `worker/src/auth.rs` (D1 `users`/`identities`/`sessions`, migration `0006`), account linking (one user ↔ N providers, conflict-safe), profile panel (nickname + generated avatar: 8×8 mirrored-pattern identicon × background hue, stored `<8 hex>|<hue>`, randomized at signup, rerolled per click; provider buttons carry inline-SVG brand marks), results rows tagged with `user_id` for future rankings. **Not usable until the provider apps are registered and 6 secrets set** — see the sign-in runbook below. Provider order rationale: Google/Kakao/GitHub need no review; Naver (review required) and Apple ($99/yr) deferred.
-- **P6 (open)**: per-user rankings + cross-device history sync on top of P5.
+
+Open (no fixed order):
+
+- **Scoring crate → wasm-bindgen module** (replacing the TS mirror; deferred since P2): was deferred until "builds run on a healthy machine or CI"; CI now exists, so this is unblocked, but it still adds the Rust/wasm toolchain to the web build. Revisit deliberately.
+- **Passage difficulty** (Director 2026-07-11): compute a readability score (Flesch-Kincaid grade) at ingest (`fk_grade` column on passages), then a practice-settings panel: **multi-select tracks + FK score range**, with the picker serving matching passages randomly but **evenly distributed** across the selected pool (not biased toward the biggest track).
+- **Rankings + cross-device history sync** — on top of sign-in (P5). Decide the result-trust policy first (server plausibility guard exists in /api/results; client stats remain client-computed).
 
 ## Deploy state
 

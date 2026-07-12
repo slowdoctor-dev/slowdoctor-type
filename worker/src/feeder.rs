@@ -17,16 +17,25 @@ pub const VOA_FEEDS: &[(&str, &str)] = &[
     ("zpyp_l-vomx-tpe_rym", "Arts & Culture"),
 ];
 
-/// `federal` sources: (source key, attribution program, WP feed URL).
-/// WordPress full-content feeds only — see extract::federal contract notes.
-/// NOAA (Drupal, no full-content feed) is deliberately deferred.
-pub const FEDERAL_FEEDS: &[(&str, &str, &str)] = &[
-    ("nasa", "NASA", "https://www.nasa.gov/feed/"),
-    (
-        "shareamerica",
-        "ShareAmerica — U.S. Department of State",
-        "https://share.america.gov/feed/",
-    ),
+/// `federal` sources — WordPress full-content feeds only (see the
+/// extract::federal contract notes). NOAA (Drupal) is deliberately deferred.
+pub struct FederalSource {
+    pub source: &'static str,  // article-id prefix + articles.source
+    pub program: &'static str, // attribution line
+    pub feed: &'static str,
+}
+
+pub const FEDERAL_FEEDS: &[FederalSource] = &[
+    FederalSource {
+        source: "nasa",
+        program: "NASA",
+        feed: "https://www.nasa.gov/feed/",
+    },
+    FederalSource {
+        source: "shareamerica",
+        program: "ShareAmerica — U.S. Department of State",
+        feed: "https://share.america.gov/feed/",
+    },
 ];
 
 /// PMC E-utilities contract verified live 2026-07-10 (see extract::pmc docs).
@@ -71,10 +80,10 @@ pub async fn run(env: &Env) -> Result<FeedReport> {
         Ok(()) => report.feeds_ok += 1,
         Err(e) => report.errors.push(format!("pmc: {e}")),
     }
-    for (source, program, feed) in FEDERAL_FEEDS {
-        match feed_federal(&db, source, program, feed, &mut report).await {
+    for src in FEDERAL_FEEDS {
+        match feed_federal(&db, src, &mut report).await {
             Ok(()) => report.feeds_ok += 1,
-            Err(e) => report.errors.push(format!("federal/{source}: {e}")),
+            Err(e) => report.errors.push(format!("federal/{}: {e}", src.source)),
         }
     }
     if let Err(e) = housekeeping(&db, &report).await {
@@ -143,11 +152,10 @@ async fn existing_ids(
 
 async fn feed_federal(
     db: &D1Database,
-    source: &'static str,
-    program: &str,
-    feed: &str,
+    src: &'static FederalSource,
     report: &mut FeedReport,
 ) -> Result<()> {
+    let FederalSource { source, program, feed } = *src; // fields are Copy
     let xml = crate::http::get_text(feed).await?;
     let items = extract::parse_rss_items(&xml);
     report.items_seen += items.len() as u32;

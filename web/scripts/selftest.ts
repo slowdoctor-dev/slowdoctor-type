@@ -20,27 +20,36 @@ import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
 import { parseAvatar, avatarSvg } from "../src/avatar.ts";
 
 let failures = 0;
+let passes = 0;
+const sections: [string, number][] = [];
+
+/** Group subsequent checks; the summary reports counts per section. */
+function section(name: string): void {
+  sections.push([name, 0]);
+  console.log(`\n-- ${name}`);
+}
+
+function record(name: string, ok: boolean, detail: string): void {
+  if (sections.length > 0) sections[sections.length - 1][1]++;
+  if (!ok) {
+    failures++;
+    console.error(`FAIL ${name}: ${detail}`);
+  } else {
+    passes++;
+    console.log(`ok   ${name}`);
+  }
+}
 
 function eq(name: string, got: unknown, want: unknown): void {
   const ok = JSON.stringify(got) === JSON.stringify(want);
-  if (!ok) {
-    failures++;
-    console.error(`FAIL ${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
-  } else {
-    console.log(`ok   ${name}`);
-  }
+  record(name, ok, `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
 }
 
 function approx(name: string, got: number, want: number, tol = 1e-9): void {
-  if (Math.abs(got - want) > tol) {
-    failures++;
-    console.error(`FAIL ${name}: got ${got}, want ${want}`);
-  } else {
-    console.log(`ok   ${name}`);
-  }
+  record(name, Math.abs(got - want) <= tol, `got ${got}, want ${want}`);
 }
 
-// --- scoring parity vectors (must match scoring/src/lib.rs tests) ---
+section("scoring parity (mirrors scoring/src/lib.rs)");
 approx("wpm(250, 60000) = 50", wpm(250, 60_000), 50);
 approx("wpm(125, 30000) = 50", wpm(125, 30_000), 50);
 approx("wpm(x, 0) = 0", wpm(250, 0), 0);
@@ -51,13 +60,9 @@ approx("consistency(constant) = 100", consistency([60, 60, 60]), 100);
 approx("consistency([0,120]) = 0", consistency([0, 120]), 0);
 approx("consistency(single) = 100", consistency([42]), 100);
 const c = consistency([50, 60, 70]);
-if (c > 80 && c < 90) console.log("ok   consistency moderate in (80,90)");
-else {
-  failures++;
-  console.error(`FAIL consistency moderate: got ${c}`);
-}
+record("consistency moderate in (80,90)", c > 80 && c < 90, `got ${c}`);
 
-// --- word tracking ---
+section("word tracking");
 eq("keyOf strips punctuation", keyOf("Hello,"), "hello");
 eq("keyOf keeps apostrophes", keyOf("doesn't"), "doesn't");
 eq("keyOf rejects short", keyOf("an"), null);
@@ -88,7 +93,7 @@ eq(
 );
 eq("practice empty input", buildPracticeText([], 10), "");
 
-// --- spaced repetition ---
+section("spaced repetition");
 const t0 = "2026-07-11T00:00:00.000Z";
 const missed1 = updateStat(undefined, true, t0);
 eq("srs: first miss counts", [missed1.miss, missed1.seen, missed1.streak], [1, 1, 0]);
@@ -128,7 +133,7 @@ eq(
   ["bbb", "aaa"],
 );
 
-// --- daily goals ---
+section("daily goals");
 const hist = [
   { at: "2026-07-11T01:00:00.000Z", track: "news" },
   { at: "2026-07-11T02:00:00.000Z", track: "news" },
@@ -145,15 +150,17 @@ eq("goals: progress unmet", goalProgress(1, 3), { text: "1/3", met: false });
 eq("goals: progress met", goalProgress(3, 3), { text: "3/3 ✓", met: true });
 eq("goals: no goal set", goalProgress(5, 0), null);
 
-// --- avatar (8×8 pattern × hue combo) ---
+section("avatar (8x8 pattern x hue)");
 eq("avatar: parse", parseAvatar("a1b2c3d4|210"), { bits: 0xa1b2c3d4, hue: 210 });
 eq("avatar: junk falls back to default", parseAvatar("junk"), { bits: 0x3c5a7e42, hue: 160 });
 eq("avatar: hue wraps into 0-359", parseAvatar("00ff00ff|540"), { bits: 0x00ff00ff, hue: 180 });
 const svg = avatarSvg("80000001|200"); // bit 0 → row 0 col 0 (+mirror), bit 31 → row 7 col 3 (+mirror)
 eq("avatar: svg mirrors cells", (svg.match(/<rect x=/g) ?? []).length, 4); // 2 set bits × 2 mirrored cells
 
+console.log("");
+for (const [name, n] of sections) console.log(`   ${name}: ${n} checks`);
 if (failures > 0) {
-  console.error(`\n${failures} failure(s)`);
+  console.error(`\n${failures} failure(s) / ${passes + failures} checks`);
   process.exit(1);
 }
-console.log("\nall selftests passed");
+console.log(`\nall ${passes} selftests passed`);
