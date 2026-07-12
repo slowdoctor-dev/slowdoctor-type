@@ -4,7 +4,9 @@
   "main": "worker/build/worker/shim.mjs",
   "compatibility_date": "2026-07-01",
   "build": {
-    "command": "cargo install -q worker-build && cd worker && worker-build --release"
+    // skip the 3-4 min source install when worker-build is already present
+    // (Workers Builds pre-installs it via cargo-binstall in the Build command)
+    "command": "(command -v worker-build >/dev/null || cargo install -q worker-build) && cd worker && worker-build --release"
   },
   "assets": {
     "directory": "web/dist"
