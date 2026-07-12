@@ -65,3 +65,8 @@ cd web && npm ci && npm run build && cd ..
 npx wrangler deploy
 # optional: FEED_TOKEN secret enables manual feeding via POST /api/feed
 ```
+
+## License
+
+Code is [MIT](LICENSE). Passage content carries its own license per passage
+(public domain / CC BY / CC0), rendered as attribution in the app.
