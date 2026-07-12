@@ -5,7 +5,7 @@
 // sdtype.words, sdtype.goals (the session cookie is server-side).
 
 const VERSION_KEY = "sdtype.version";
-const CURRENT = 2;
+const CURRENT = 3;
 
 export function migrateStorage(): void {
   let v = 1;
@@ -20,6 +20,15 @@ export function migrateStorage(): void {
     const track = localStorage.getItem("sdtype.track");
     if (track === "medical") localStorage.setItem("sdtype.track", "aesthetic");
     if (track === "classic") localStorage.setItem("sdtype.track", "news");
+  }
+
+  if (v < 3) {
+    // 2026-07-12 rename: aesthetic → pmc (source-named, like federal)
+    if (localStorage.getItem("sdtype.track") === "aesthetic")
+      localStorage.setItem("sdtype.track", "pmc");
+    const goals = localStorage.getItem("sdtype.goals");
+    if (goals?.includes('"aesthetic"'))
+      localStorage.setItem("sdtype.goals", goals.replace('"aesthetic"', '"pmc"'));
   }
 
   try {

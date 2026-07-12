@@ -6,7 +6,7 @@ use worker::*;
 use crate::no_store;
 
 /// Must list the same keys as web/src/tracks.ts (see AGENTS.md conventions).
-const TRACKS: &[&str] = &["news", "daily", "aesthetic", "federal"];
+const TRACKS: &[&str] = &["news", "daily", "pmc", "federal"];
 
 #[derive(serde::Serialize, serde::Deserialize)]
 struct Passage {

@@ -2,7 +2,7 @@
 //! Runs from the cron trigger and from POST /api/feed (token-guarded).
 //!
 //! Sources: VOA Learning English RSS (`news`, public domain), PMC open-access
-//! CC BY abstracts (`aesthetic` — derm/plastic-surgery papers), and U.S.
+//! CC BY abstracts (`pmc` — medical research abstracts), and U.S.
 //! federal WordPress feeds with full-content bodies (`federal`, public
 //! domain). `daily` is a static authored seed shipped as a D1 migration,
 //! not fed here.
@@ -308,7 +308,7 @@ async fn feed_pmc(db: &D1Database, report: &mut FeedReport) -> Result<()> {
             url: format!("https://pmc.ncbi.nlm.nih.gov/articles/PMC{}/", art.pmcid),
             title: art.title.clone(),
             source: "pmc",
-            track: "aesthetic",
+            track: "pmc",
             license: "cc-by",
             attribution: format!("{author} et al., {} ({year}) — CC BY", art.journal),
             published_at: art.year.clone(),
