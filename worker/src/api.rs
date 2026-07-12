@@ -110,31 +110,47 @@ pub async fn passages(req: Request, ctx: RouteContext<()>) -> Result<Response> {
     };
     let db = ctx.env.d1("DB")?;
 
-    // pick the track first, uniformly among selected tracks with matches
-    let mut candidates = Vec::new();
-    for t in &selected {
-        let n = match range {
-            Some((lo, hi)) => db
-                .prepare(
-                    "SELECT COUNT(*) AS n FROM passages p JOIN articles a ON a.id = p.article_id \
-                     WHERE a.track = ?1 AND p.fk_grade >= ?2 AND p.fk_grade <= ?3",
-                )
-                .bind(&[t.as_str().into(), lo.into(), hi.into()])?,
-            None => db
-                .prepare(
-                    "SELECT COUNT(*) AS n FROM passages p JOIN articles a ON a.id = p.article_id \
-                     WHERE a.track = ?1",
-                )
-                .bind(&[t.as_str().into()])?,
+    // pick the track first, uniformly among selected tracks with matches —
+    // one GROUP BY query covers all selected tracks
+    let placeholders = (1..=selected.len())
+        .map(|i| format!("?{i}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let mut binds: Vec<wasm_bindgen::JsValue> =
+        selected.iter().map(|t| t.as_str().into()).collect();
+    let sql = match range {
+        Some((lo, hi)) => {
+            binds.push(lo.into());
+            binds.push(hi.into());
+            format!(
+                "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
+                 JOIN articles a ON a.id = p.article_id WHERE a.track IN ({placeholders}) \
+                 AND p.fk_grade >= ?{} AND p.fk_grade <= ?{} GROUP BY a.track",
+                selected.len() + 1,
+                selected.len() + 2
+            )
         }
-        .first::<serde_json::Value>(None)
-        .await?
-        .and_then(|v| v.get("n").and_then(|x| x.as_i64()))
-        .unwrap_or(0);
-        if n > 0 {
-            candidates.push(t.clone());
-        }
+        None => format!(
+            "SELECT a.track AS track, COUNT(*) AS n FROM passages p \
+             JOIN articles a ON a.id = p.article_id WHERE a.track IN ({placeholders}) \
+             GROUP BY a.track"
+        ),
+    };
+    #[derive(serde::Deserialize)]
+    struct TrackCount {
+        track: String,
+        n: i64,
     }
+    let candidates: Vec<String> = db
+        .prepare(&sql)
+        .bind(&binds)?
+        .all()
+        .await?
+        .results::<TrackCount>()?
+        .into_iter()
+        .filter(|r| r.n > 0)
+        .map(|r| r.track)
+        .collect();
     let Some(track) = pick_random(&candidates) else {
         return no_store(Response::from_json(&serde_json::json!({
             "passage": null,
@@ -203,17 +219,20 @@ pub async fn post_result(mut req: Request, ctx: RouteContext<()>) -> Result<Resp
     // exceed what the referenced passage allows in the claimed time.
     // Client stats stay client-computed; this only rejects nonsense.
     if let Some(pid) = r.passage_id {
-        let wc = db
-            .prepare("SELECT word_count AS wc FROM passages WHERE id = ?1")
+        let len = db
+            .prepare("SELECT length(text) AS len FROM passages WHERE id = ?1")
             .bind(&[(pid as f64).into()])?
             .first::<serde_json::Value>(None)
             .await?
-            .and_then(|v| v.get("wc").and_then(|n| n.as_i64()));
-        let Some(wc) = wc else {
+            .and_then(|v| v.get("len").and_then(|n| n.as_i64()));
+        let Some(len) = len else {
             return Response::error("unknown passage", 400);
         };
-        let implied_wpm = wc as f64 / (r.duration_ms as f64 / 60_000.0);
-        if implied_wpm > 400.0 || r.wpm > implied_wpm * 1.5 + 10.0 {
+        // perfect pace = every char correct: chars/5 per minute, same unit as
+        // net wpm — net can never beat it (word-based bounds under-estimate
+        // for long-token passages like vocab/code and false-reject fast runs)
+        let perfect_wpm = (len as f64 / 5.0) / (r.duration_ms as f64 / 60_000.0);
+        if perfect_wpm > 400.0 || r.wpm > perfect_wpm * 1.1 + 5.0 {
             return Response::error("result implausible", 400);
         }
     }
