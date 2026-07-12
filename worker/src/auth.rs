@@ -428,7 +428,7 @@ fn cookie(req: &Request, name: &str) -> Option<String> {
 
 /// Browser-sent mutations must come from our own origin (CSRF guard on top
 /// of SameSite=Lax; requests without an Origin header are non-browser tools).
-fn same_origin(req: &Request) -> bool {
+pub(crate) fn same_origin(req: &Request) -> bool {
     let Ok(Some(origin)) = req.headers().get("origin") else {
         return true;
     };

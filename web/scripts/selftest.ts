@@ -17,6 +17,7 @@ import {
 } from "../src/words.ts";
 
 import { countsForDay, clampGoal, goalProgress } from "../src/goals.ts";
+import { mergeHistories, type HistoryEntry } from "../src/history.ts";
 import { parseAvatar, avatarSvg } from "../src/avatar.ts";
 
 let failures = 0;
@@ -149,6 +150,18 @@ eq("goals: clamp NaN", clampGoal(Number.NaN), 0);
 eq("goals: progress unmet", goalProgress(1, 3), { text: "1/3", met: false });
 eq("goals: progress met", goalProgress(3, 3), { text: "3/3 ✓", met: true });
 eq("goals: no goal set", goalProgress(5, 0), null);
+
+section("history sync merge");
+const he = (at: string, wpm: number): HistoryEntry => ({
+  at, wpm, rawWpm: wpm, accuracy: 95, consistency: 80, durationMs: 60000, track: "news", passageId: null,
+});
+eq("merge: union sorted by time",
+  mergeHistories([he("2026-07-02T00:00:00Z", 60)], [he("2026-07-01T00:00:00Z", 50)]).map((e) => e.wpm),
+  [50, 60]);
+eq("merge: duplicate timestamps collapse",
+  mergeHistories([he("2026-07-01T00:00:00Z", 50)], [he("2026-07-01T00:00:00Z", 55)]).length,
+  1);
+eq("merge: both empty", mergeHistories([], []), []);
 
 section("avatar (8x8 pattern x hue)");
 eq("avatar: parse", parseAvatar("a1b2c3d4|210"), { bits: 0xa1b2c3d4, hue: 210 });

@@ -11,6 +11,7 @@ import { computeMissedWords, recordTest } from "./words";
 import { initAccount, accountModalOpen } from "./account";
 import { initDashboard, dashboardOpen, closeDashboard } from "./dashboard";
 import { migrateStorage } from "./storage";
+import { initSync, schedulePush } from "./sync";
 import { TRACKS, isTrack } from "./tracks";
 
 migrateStorage();
@@ -158,6 +159,7 @@ function showResults(result: TestResult): void {
     passageId: currentPassage?.id ?? null,
   });
   renderHistStrip();
+  schedulePush();
 
   if (currentPassage) {
     recordTest(
@@ -355,5 +357,8 @@ renderTrackButtons();
 renderHistStrip();
 initDashboard((passage) => startTest(passage, true));
 void initAccount();
+void initSync().then((synced) => {
+  if (synced) renderHistStrip(); // remote entries may have arrived
+});
 void loadTrackCounts();
 void nextPassage();

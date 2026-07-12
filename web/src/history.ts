@@ -21,6 +21,25 @@ export function loadHistory(): HistoryEntry[] {
   }
 }
 
+/** Overwrite the stored history (sync merge result). */
+export function replaceHistory(entries: HistoryEntry[]): void {
+  const trimmed = entries.slice(-MAX_ENTRIES);
+  try {
+    localStorage.setItem(KEY, JSON.stringify(trimmed));
+  } catch {
+    /* storage full or blocked — non-fatal */
+  }
+}
+
+/** Union of two histories by timestamp key, oldest→newest, capped. Pure. */
+export function mergeHistories(a: HistoryEntry[], b: HistoryEntry[]): HistoryEntry[] {
+  const byAt = new Map<string, HistoryEntry>();
+  for (const e of [...a, ...b]) byAt.set(e.at, e);
+  return [...byAt.values()]
+    .sort((x, y) => (x.at < y.at ? -1 : x.at > y.at ? 1 : 0))
+    .slice(-MAX_ENTRIES);
+}
+
 export function saveResult(entry: HistoryEntry): void {
   const all = loadHistory();
   all.push(entry);

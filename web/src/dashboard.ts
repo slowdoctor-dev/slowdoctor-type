@@ -2,6 +2,7 @@
 // practice launcher, daily WPM/accuracy chart, recent-tests table.
 
 import { $, cssVar } from "./dom";
+import { avatarSvg } from "./avatar";
 import type { Passage } from "./api";
 import { loadHistory, summary, type HistoryEntry } from "./history";
 import { buildPracticeText, problemWords, reviewQueue } from "./words";
@@ -84,7 +85,42 @@ function renderGoals(entries: HistoryEntry[] = loadHistory()): void {
   }
 }
 
+async function loadRankings(): Promise<void> {
+  const box = $("#d-rankings");
+  try {
+    const res = await fetch("/api/rankings?days=7");
+    if (!res.ok) throw new Error();
+    const j = (await res.json()) as { top: { nickname: string; avatar: string; wpm: number }[] };
+    box.textContent = "";
+    if (j.top.length === 0) {
+      box.textContent = "no signed-in results yet";
+      return;
+    }
+    j.top.forEach((r, i) => {
+      const row = document.createElement("div");
+      row.className = "rank-row";
+      const place = document.createElement("span");
+      place.className = "rank-place";
+      place.textContent = String(i + 1);
+      const av = document.createElement("span");
+      av.className = "avatar";
+      av.innerHTML = avatarSvg(r.avatar);
+      const name = document.createElement("span");
+      name.className = "rank-name";
+      name.textContent = r.nickname;
+      const wpm = document.createElement("span");
+      wpm.className = "rank-wpm";
+      wpm.textContent = `${Math.round(r.wpm)} wpm`;
+      row.append(place, av, name, wpm);
+      box.append(row);
+    });
+  } catch {
+    box.textContent = "rankings unavailable";
+  }
+}
+
 function renderDashboard(): void {
+  void loadRankings();
   const all = loadHistory();
   $("#d-summary").textContent = all.length ? summary() : "no tests yet — type something first";
   renderGoals(all);

@@ -429,6 +429,29 @@ kbd {
   color: var(--fg);
 }
 
+.rank-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.15rem 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.rank-place {
+  width: 1.2rem;
+  color: var(--dim);
+  text-align: right;
+}
+
+.rank-name {
+  color: var(--fg);
+}
+
+.rank-wpm {
+  margin-left: auto;
+  color: var(--accent);
+}
+
 /* ---------- account ---------- */
 
 #account-btn {

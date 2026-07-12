@@ -268,6 +268,87 @@ fn pick_random(items: &[String]) -> Option<&String> {
     items.get(n % items.len())
 }
 
+/// GET /api/rankings?days=1|7|30 — top net WPM among signed-in users.
+pub async fn rankings(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let url = req.url()?;
+    let days = url
+        .query_pairs()
+        .find(|(k, _)| k == "days")
+        .map(|(_, v)| v.to_string())
+        .unwrap_or_else(|| "7".to_string());
+    let modifier = match days.as_str() {
+        "1" => "-1 days",
+        "7" => "-7 days",
+        "30" => "-30 days",
+        _ => return Response::error("days must be 1, 7 or 30", 400),
+    };
+    let db = ctx.env.d1("DB")?;
+    #[derive(serde::Serialize, serde::Deserialize)]
+    struct Row {
+        nickname: String,
+        avatar: String,
+        wpm: f64,
+    }
+    let rows = db
+        .prepare(
+            "SELECT u.nickname AS nickname, u.avatar AS avatar, MAX(r.wpm) AS wpm \
+             FROM results r JOIN users u ON u.id = r.user_id \
+             WHERE r.created_at >= datetime('now', ?1) \
+             GROUP BY r.user_id ORDER BY wpm DESC LIMIT 10",
+        )
+        .bind(&[modifier.into()])?
+        .all()
+        .await?
+        .results::<Row>()?;
+    no_store(Response::from_json(&serde_json::json!({ "days": days, "top": rows }))?)
+}
+
+/// GET /api/history — the signed-in user's synced history blob (or []).
+pub async fn get_history(req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    let db = ctx.env.d1("DB")?;
+    let Some(user_id) = crate::auth::session_user_id(&db, &req).await? else {
+        return Response::error("unauthorized", 401);
+    };
+    let data = db
+        .prepare("SELECT data FROM user_history WHERE user_id = ?1")
+        .bind(&[(user_id as f64).into()])?
+        .first::<serde_json::Value>(None)
+        .await?
+        .and_then(|v| v.get("data").and_then(|d| d.as_str().map(str::to_string)))
+        .unwrap_or_else(|| "[]".to_string());
+    let mut resp = Response::ok(data)?;
+    resp.headers_mut().set("content-type", "application/json")?;
+    no_store(resp)
+}
+
+/// PUT /api/history — replace the blob (client sends the merged result).
+pub async fn put_history(mut req: Request, ctx: RouteContext<()>) -> Result<Response> {
+    if !crate::auth::same_origin(&req) {
+        return Response::error("forbidden", 403);
+    }
+    let db = ctx.env.d1("DB")?;
+    let Some(user_id) = crate::auth::session_user_id(&db, &req).await? else {
+        return Response::error("unauthorized", 401);
+    };
+    let body = req.text().await?;
+    if body.len() > 512 * 1024 {
+        return Response::error("history too large", 413);
+    }
+    // must be a JSON array — reject anything else outright
+    match serde_json::from_str::<serde_json::Value>(&body) {
+        Ok(v) if v.is_array() => {}
+        _ => return Response::error("bad json", 400),
+    }
+    db.prepare(
+        "INSERT INTO user_history (user_id, data, updated_at) VALUES (?1, ?2, datetime('now')) \
+         ON CONFLICT(user_id) DO UPDATE SET data = ?2, updated_at = datetime('now')",
+    )
+    .bind(&[(user_id as f64).into(), body.as_str().into()])?
+    .run()
+    .await?;
+    Response::from_json(&serde_json::json!({ "ok": true }))
+}
+
 async fn count(db: &D1Database, table: &str) -> Result<i64> {
     // `table` comes from internal call sites only — never user input
     let row = db
