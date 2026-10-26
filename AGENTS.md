@@ -12,7 +12,7 @@ do not read or write the LEAD workspace from here.
 
 ## Locked decisions (Director-confirmed 2026-07-10)
 
-1. Separate repo under github `slowdoctor-dev`, deployed at **type.slowdoctor.dev**, linked from slowdoctor.dev (Next.js site — stacks never touch).
+1. Separate repo under github `slowdoctor-dev`, deployed at **type.slowdoctor.dev**, linked from slowdoctor.dev (a Rust + Leptos static site in `slowdoctor-dev/slowdoctor-web`; the two stacks never touch).
 2. **Public** deployment → feed may only contain **public-domain or CC BY** text, attribution rendered under every passage. No copyrighted sources, ever. Personal history stays in localStorage. **Amended 2026-07-11 (Director): accounts exist now** — social sign-in (Google/Kakao/GitHub OAuth in the worker, `worker/src/auth.rs`) for profiles and upcoming rankings. Privacy stance: **no email collection**, only provider uid + display-name snapshot; a privacy-policy page is required before adding providers that mandate review (e.g. Naver).
 3. **Rust hybrid**: workers-rs backend (API + cron feeder + D1), TypeScript browser UI. UI stays TS — do not port the DOM layer to WASM frameworks.
 4. **PMC paper-English track = switchable option**: `track` tag exists in the schema from day one; the UI source toggle persists in localStorage. **Track lineup amended 2026-07-11 (Director)**: now `news` / `daily` / `pmc` / `federal` / `vocab` (2026-07-12: authored GRE-level word-definition passages, CC0, seed `0009`) — `classic` (Gutenberg) retired, `medical` briefly renamed `aesthetic` then **`pmc` (2026-07-12: the query returns general medical-research abstracts, so the track is source-named like `federal`; migration `0008`)**, `federal` added (modern-English U.S. government works; migration `0005`).
