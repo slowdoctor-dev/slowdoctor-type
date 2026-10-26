@@ -55,7 +55,7 @@ cargo test -p scoring
 
 Deploys run on Cloudflare **Workers Builds** (Git integration) from `main` —
 build/deploy commands live in the Workers project settings, and D1 migrations
-are applied automatically by the deploy command. See AGENTS.md "Deploy state"
+are applied automatically by the deploy command. See [HANDOFF.md](HANDOFF.md)
 for the current trigger status and the sign-in secrets runbook.
 
 Manual bootstrap from scratch (no Workers Builds):
